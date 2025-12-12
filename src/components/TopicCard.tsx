@@ -94,9 +94,8 @@ export function TopicReference({ topic }: TopicCardProps) {
 const styles = StyleSheet.create({
   headerCard: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 0,
     padding: 20,
-    marginHorizontal: 20,
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -107,32 +106,34 @@ const styles = StyleSheet.create({
   topicLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#667eea',
+    color: '#000080',
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 8,
+    textAlign: 'center',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#1f2937',
     marginBottom: 16,
+    textAlign: 'center',
   },
   mainImage: {
     width: '100%',
-    height: 200,
+    aspectRatio: 16 / 9,
     borderRadius: 12,
   },
   referenceSection: {
-    marginHorizontal: 20,
+    marginHorizontal: 5,
     marginBottom: 20,
   },
   referenceHeader: {
     backgroundColor: '#1e1b4b',
     paddingVertical: 16,
     paddingHorizontal: 20,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    // borderTopLeftRadius: 12,
+    // borderTopRightRadius: 12,
   },
   referenceTitle: {
     fontSize: 18,

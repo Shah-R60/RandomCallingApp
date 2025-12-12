@@ -1,12 +1,13 @@
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, Pressable, ActivityIndicator, Alert, ScrollView } from 'react-native';
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Ionicons } from '@expo/vector-icons';
 import { useStreamVideoClient } from '@stream-io/video-react-native-sdk';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../providers/AuthProvider';
 import TopicCard, { TopicReference } from '../../components/TopicCard';
+import SwipeButton from 'rn-swipe-button';
 
 const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
 
@@ -29,6 +30,7 @@ export default function HomeScreen() {
   const [status, setStatus] = useState<string>('');
   const [topic, setTopic] = useState<Topic | null>(null);
   const [topicLoading, setTopicLoading] = useState(true);
+  const swipeButtonRef = useRef<any>(null);
   const videoClient = useStreamVideoClient();
   const { user } = useAuth();
 
@@ -246,45 +248,51 @@ export default function HomeScreen() {
       {/* Today's Topic */}
       {topicLoading ? (
         <View style={styles.topicLoadingContainer}>
-          <ActivityIndicator size="small" color="#667eea" />
+          <ActivityIndicator size="small" color="#000080" />
         </View>
       ) : topic ? (
         <TopicCard topic={topic} />
       ) : null}
 
       {/* Call Button */}
-      <View style={styles.callButtonContainer}>
-        {isSearching ? (
-          <View style={styles.searchingContainer}>
-            <ActivityIndicator size="large" color="#667eea" />
-            <Text style={styles.statusText}>{status}</Text>
-            <Pressable style={styles.cancelButton} onPress={handleCancelSearch}>
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable style={styles.findButton} onPress={handleFindRandomUser}>
-            <Ionicons name="call" size={40} color="#fff" />
-          </Pressable>
-        )}
+      <View style={styles.callButtonSection}>
+        <View style={styles.callButtonContainer}>
+          {isSearching ? (
+            <View style={styles.searchingContainer}>
+              <ActivityIndicator size="large" color="#000080" />
+              <Text style={styles.statusText}>{status}</Text>
+              <Pressable style={styles.cancelButton} onPress={handleCancelSearch}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.swipeButtonWrapper}>
+              <SwipeButton
+                ref={swipeButtonRef}
+                containerStyles={styles.swipeButtonContainer}
+                thumbIconBackgroundColor="#000080"
+                thumbIconBorderColor="#000080"
+                railBackgroundColor="#d1d5db"
+                railBorderColor="#d1d5db"
+                railFillBackgroundColor="#000080"
+                railFillBorderColor="#000080"
+                title="Slide to Find Someone"
+                titleColor="#6b7280"
+                titleFontSize={16}
+                thumbIconComponent={() => (
+                  <Ionicons name="call" size={30} color="#fff" />
+                )}
+                onSwipeSuccess={handleFindRandomUser}
+                shouldResetAfterSuccess={true}
+                resetAfterSuccessAnimDelay={1000}
+              />
+            </View>
+          )}
+        </View>
       </View>
 
       {/* Reference Section - Below Call Button */}
       {topic && <TopicReference topic={topic} />}
-
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Tap the button to connect with a random person</Text>
-        <Pressable 
-          style={styles.logoutButton} 
-          onPress={async () => {
-            console.log('🚪 [LOGOUT] User logging out...');
-            await supabase.auth.signOut();
-          }}
-        >
-          <Ionicons name="log-out-outline" size={20} color="#ef4444" />
-          <Text style={styles.logoutButtonText}>Sign Out</Text>
-        </Pressable>
-      </View>
     </ScrollView>
   );
 }
@@ -302,30 +310,25 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
   },
+  callButtonSection: {
+    backgroundColor: '#e6e9f0',
+    paddingVertical: 40,
+    marginBottom: 20,
+  },
   callButtonContainer: {
     alignItems: 'center',
-    paddingVertical: 30,
-    paddingHorizontal: 40,
+    paddingHorizontal: 20,
   },
-  findButton: {
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: '#667eea',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+  swipeButtonWrapper: {
+    width: '85%',
+    maxWidth: 350,
   },
-  findButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 12,
-    textAlign: 'center',
+  swipeButtonContainer: {
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    height: 60,
+    backgroundColor: '#f3f4f6',
   },
   searchingContainer: {
     alignItems: 'center',
@@ -333,7 +336,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 20,
-    color: '#667eea',
+    color: '#000080',
     fontWeight: '600',
     marginTop: 16,
   },
@@ -347,33 +350,6 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
-  },
-  footer: {
-    paddingBottom: 40,
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 14,
-    color: '#9ca3af',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#ef4444',
-    marginTop: 10,
-  },
-  logoutButtonText: {
-    color: '#ef4444',
-    fontSize: 14,
     fontWeight: '600',
   },
 });

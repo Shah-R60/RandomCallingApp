@@ -1,22 +1,59 @@
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, Text, View, Pressable, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import React, { useState, useEffect } from "react";
 import { Ionicons } from '@expo/vector-icons';
 import { useStreamVideoClient } from '@stream-io/video-react-native-sdk';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../providers/AuthProvider';
+import TopicCard, { TopicReference } from '../../components/TopicCard';
+
+const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
+
+interface Topic {
+  _id: string;
+  title: string;
+  image: string;
+  description: Array<{
+    type: 'text' | 'image' | 'video';
+    content: string;
+    order: number;
+    _id: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export default function HomeScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [status, setStatus] = useState<string>('');
+  const [topic, setTopic] = useState<Topic | null>(null);
+  const [topicLoading, setTopicLoading] = useState(true);
   const videoClient = useStreamVideoClient();
   const { user } = useAuth();
 
   useEffect(() => {
     // Clean up any leftover queue entries and calls when app loads
     cleanupOnMount();
+    // Fetch today's topic
+    fetchNewestTopic();
   }, []);
+
+  const fetchNewestTopic = async () => {
+    try {
+      setTopicLoading(true);
+      const response = await fetch(`${BACKEND_URL}/api/topic/getNewestTopic`);
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        setTopic(result.data);
+      }
+    } catch (error) {
+      console.error('Error fetching topic:', error);
+    } finally {
+      setTopicLoading(false);
+    }
+  };
 
   const cleanupOnMount = async () => {
     try {
@@ -203,16 +240,20 @@ export default function HomeScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       <StatusBar style="auto" />
-      
-      <View style={styles.header}>
-        <Ionicons name="mic" size={80} color="#667eea" />
-        <Text style={styles.title}>Random Audio Chat</Text>
-        <Text style={styles.subtitle}>Connect with strangers through voice</Text>
-      </View>
 
-      <View style={styles.mainContent}>
+      {/* Today's Topic */}
+      {topicLoading ? (
+        <View style={styles.topicLoadingContainer}>
+          <ActivityIndicator size="small" color="#667eea" />
+        </View>
+      ) : topic ? (
+        <TopicCard topic={topic} />
+      ) : null}
+
+      {/* Call Button */}
+      <View style={styles.callButtonContainer}>
         {isSearching ? (
           <View style={styles.searchingContainer}>
             <ActivityIndicator size="large" color="#667eea" />
@@ -224,10 +265,12 @@ export default function HomeScreen() {
         ) : (
           <Pressable style={styles.findButton} onPress={handleFindRandomUser}>
             <Ionicons name="call" size={40} color="#fff" />
-            <Text style={styles.findButtonText}>Find Someone to Talk</Text>
           </Pressable>
         )}
       </View>
+
+      {/* Reference Section - Below Call Button */}
+      {topic && <TopicReference topic={topic} />}
 
       <View style={styles.footer}>
         <Text style={styles.footerText}>Tap the button to connect with a random person</Text>
@@ -242,7 +285,7 @@ export default function HomeScreen() {
           <Text style={styles.logoutButtonText}>Sign Out</Text>
         </Pressable>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -251,26 +294,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f9fa',
   },
-  header: {
+  scrollContent: {
+    flexGrow: 1,
+    paddingTop: 20,
+  },
+  topicLoadingContainer: {
+    padding: 20,
     alignItems: 'center',
-    paddingTop: 80,
-    paddingBottom: 40,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginTop: 20,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginTop: 8,
-  },
-  mainContent: {
-    flex: 1,
-    justifyContent: 'center',
+  callButtonContainer: {
     alignItems: 'center',
+    paddingVertical: 30,
     paddingHorizontal: 40,
   },
   findButton: {

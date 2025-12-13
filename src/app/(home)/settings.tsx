@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { router } from 'expo-router';
+import theme from '../../constants/Theme';
 
 export default function SettingsScreen() {
   const handleLogout = async () => {
@@ -14,13 +15,11 @@ export default function SettingsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.title}>Settings</Text>
-        
         <Pressable 
           style={styles.logoutButton} 
           onPress={handleLogout}
         >
-          <Ionicons name="log-out-outline" size={24} color="#ef4444" />
+          <Ionicons name="log-out-outline" size={24} color={theme.colors.error} />
           <Text style={styles.logoutButtonText}>Sign Out</Text>
         </Pressable>
       </View>
@@ -31,37 +30,37 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.colors.background,
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: theme.spacing.lg,
   },
   title: {
-    fontSize: 28,
+    fontSize: theme.fontSize.xxxl,
     fontWeight: 'bold',
-    color: '#1f2937',
+    color: theme.colors.textPrimary,
     marginBottom: 30,
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    backgroundColor: theme.colors.white,
+    borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: '#ef4444',
-    shadowColor: '#000',
+    borderColor: theme.colors.error,
+    shadowColor: theme.colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
   logoutButtonText: {
-    color: '#ef4444',
-    fontSize: 16,
+    color: theme.colors.error,
+    fontSize: theme.fontSize.md,
     fontWeight: '600',
   },
 });

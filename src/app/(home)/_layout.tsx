@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../providers/AuthProvider';
 import VideoProvider from '../../providers/VideoProvider';
 import CallProvider from '../../providers/CallProvider';
+import theme from '../../constants/Theme';
 
 export default function HomeLayout() {
   const { user } = useAuth();
@@ -20,16 +21,17 @@ export default function HomeLayout() {
             name="index" 
             options={{ 
               headerShown: true,
-              title: 'Random Audio Chat',
-              headerStyle: { backgroundColor: '#000080' },
-              headerTintColor: '#fff',
-              headerTitleStyle: { fontWeight: 'bold' },
+              title: 'Cross-Call',
+              headerStyle: { backgroundColor: theme.colors.primary },
+              headerTintColor: theme.colors.white,
+              headerTitleStyle: { fontWeight: 'bold', fontSize: 25 },
+              headerTitleAlign: 'center',
               headerRight: () => (
                 <Pressable 
                   onPress={() => router.push('/(home)/settings')}
                   style={{ marginRight: 15 }}
                 >
-                  <Ionicons name="settings-outline" size={24} color="#fff" />
+                  <Ionicons name="settings-outline" size={24} color={theme.colors.white} />
                 </Pressable>
               ),
             }} 
@@ -39,8 +41,8 @@ export default function HomeLayout() {
             options={{ 
               headerShown: true,
               title: 'Settings',
-              headerStyle: { backgroundColor: '#000080' },
-              headerTintColor: '#fff',
+              headerStyle: { backgroundColor: theme.colors.primary },
+              headerTintColor: theme.colors.white,
               headerTitleStyle: { fontWeight: 'bold' }
             }} 
           />

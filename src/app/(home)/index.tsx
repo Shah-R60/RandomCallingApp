@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../providers/AuthProvider';
 import TopicCard, { TopicReference } from '../../components/TopicCard';
 import SwipeButton from 'rn-swipe-button';
+import theme from '../../constants/Theme';
 
 const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
 
@@ -248,7 +249,7 @@ export default function HomeScreen() {
       {/* Today's Topic */}
       {topicLoading ? (
         <View style={styles.topicLoadingContainer}>
-          <ActivityIndicator size="small" color="#000080" />
+          <ActivityIndicator size="small" color={theme.colors.primary} />
         </View>
       ) : topic ? (
         <TopicCard topic={topic} />
@@ -259,7 +260,7 @@ export default function HomeScreen() {
         <View style={styles.callButtonContainer}>
           {isSearching ? (
             <View style={styles.searchingContainer}>
-              <ActivityIndicator size="large" color="#000080" />
+              <ActivityIndicator size="large" color={theme.colors.primary} />
               <Text style={styles.statusText}>{status}</Text>
               <Pressable style={styles.cancelButton} onPress={handleCancelSearch}>
                 <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -270,17 +271,17 @@ export default function HomeScreen() {
               <SwipeButton
                 ref={swipeButtonRef}
                 containerStyles={styles.swipeButtonContainer}
-                thumbIconBackgroundColor="#000080"
-                thumbIconBorderColor="#000080"
-                railBackgroundColor="#d1d5db"
-                railBorderColor="#d1d5db"
-                railFillBackgroundColor="#000080"
-                railFillBorderColor="#000080"
+                thumbIconBackgroundColor={theme.colors.primary}
+                thumbIconBorderColor={theme.colors.primary}
+                railBackgroundColor={theme.colors.sliderBorder}
+                railBorderColor={theme.colors.sliderBorder}
+                railFillBackgroundColor={theme.colors.sliderFill}
+                railFillBorderColor={theme.colors.sliderFill}
                 title="Slide to Find Someone"
-                titleColor="#6b7280"
-                titleFontSize={16}
+                titleColor={theme.colors.textSecondary}
+                titleFontSize={theme.fontSize.md}
                 thumbIconComponent={() => (
-                  <Ionicons name="call" size={30} color="#fff" />
+                  <Ionicons name="call" size={30} color={theme.colors.white} />
                 )}
                 onSwipeSuccess={handleFindRandomUser}
                 shouldResetAfterSuccess={true}
@@ -300,56 +301,56 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: theme.colors.background,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 20,
+    paddingTop: theme.spacing.lg,
   },
   topicLoadingContainer: {
-    padding: 20,
+    padding: theme.spacing.lg,
     alignItems: 'center',
   },
   callButtonSection: {
-    backgroundColor: '#e6e9f0',
-    paddingVertical: 40,
-    marginBottom: 20,
+    backgroundColor: theme.colors.backgroundDark,
+    paddingVertical: theme.spacing.xxl,
+    marginBottom: theme.spacing.lg,
   },
   callButtonContainer: {
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: theme.spacing.lg,
   },
   swipeButtonWrapper: {
     width: '85%',
     maxWidth: 350,
   },
   swipeButtonContainer: {
-    borderRadius: 30,
+    borderRadius: theme.borderRadius.xxl,
     borderWidth: 2,
-    borderColor: '#d1d5db',
+    borderColor: theme.colors.sliderBorder,
     height: 60,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: theme.colors.sliderBackground,
   },
   searchingContainer: {
     alignItems: 'center',
-    gap: 20,
+    gap: theme.spacing.lg,
   },
   statusText: {
-    fontSize: 20,
-    color: '#000080',
+    fontSize: theme.fontSize.xl,
+    color: theme.colors.primary,
     fontWeight: '600',
-    marginTop: 16,
+    marginTop: theme.spacing.md,
   },
   cancelButton: {
-    marginTop: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-    backgroundColor: '#ef4444',
-    borderRadius: 24,
+    marginTop: theme.spacing.lg,
+    paddingVertical: theme.spacing.xs + 8,
+    paddingHorizontal: theme.spacing.lg + 12,
+    backgroundColor: theme.colors.error,
+    borderRadius: theme.borderRadius.xxl,
   },
   cancelButtonText: {
-    color: '#fff',
-    fontSize: 16,
+    color: theme.colors.white,
+    fontSize: theme.fontSize.md,
     fontWeight: '600',
   },
 });

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
-import theme from '../constants/Theme';
+import { useTheme } from '../providers/ThemeProvider';
 
 interface ContentBlock {
   type: 'text' | 'image' | 'video';
@@ -25,6 +25,9 @@ interface TopicCardProps {
 
 // Component for just the topic header (title + image)
 export default function TopicCard({ topic }: TopicCardProps) {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
+  
   return (
     <View style={styles.headerCard}>
       <Text style={styles.topicLabel}>TODAY'S TOPIC</Text>
@@ -41,6 +44,8 @@ export default function TopicCard({ topic }: TopicCardProps) {
 
 // Component for the reference section (description content)
 export function TopicReference({ topic }: TopicCardProps) {
+  const { theme } = useTheme();
+  
   const renderContent = (block: ContentBlock) => {
     switch (block.type) {
       case 'text':
@@ -74,6 +79,8 @@ export function TopicReference({ topic }: TopicCardProps) {
     }
   };
 
+  const styles = createStyles(theme);
+
   if (!topic.description || topic.description.length === 0) {
     return null;
   }
@@ -92,9 +99,9 @@ export function TopicReference({ topic }: TopicCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   headerCard: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.backgroundLight,
     borderRadius: 0,
     padding: theme.spacing.lg,
     marginBottom: theme.spacing.lg,
@@ -141,7 +148,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   referenceContent: {
-    backgroundColor: theme.colors.white,
+    backgroundColor: theme.colors.backgroundLight,
     padding: theme.spacing.lg,
     borderBottomLeftRadius: theme.borderRadius.md,
     borderBottomRightRadius: theme.borderRadius.md,

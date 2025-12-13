@@ -4,10 +4,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../providers/AuthProvider';
 import VideoProvider from '../../providers/VideoProvider';
 import CallProvider from '../../providers/CallProvider';
-import theme from '../../constants/Theme';
+import { useTheme } from '../../providers/ThemeProvider';
 
 export default function HomeLayout() {
   const { user } = useAuth();
+  const { theme } = useTheme();
 
   if (!user) {
     return <Redirect href="/(auth)/login" />;
@@ -44,6 +45,13 @@ export default function HomeLayout() {
               headerStyle: { backgroundColor: theme.colors.primary },
               headerTintColor: theme.colors.white,
               headerTitleStyle: { fontWeight: 'bold' }
+            }} 
+          />
+          <Stack.Screen 
+            name="ideology-selector" 
+            options={{ 
+              headerShown: false,
+              presentation: 'card'
             }} 
           />
           <Stack.Screen 

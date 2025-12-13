@@ -2,13 +2,14 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, Pressable, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import React, { useState, useEffect, useRef } from "react";
+import WaitingAnimation from '../../components/WaitingAnimation';
 import { Ionicons } from '@expo/vector-icons';
 import { useStreamVideoClient } from '@stream-io/video-react-native-sdk';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../providers/AuthProvider';
 import TopicCard, { TopicReference } from '../../components/TopicCard';
 import SwipeButton from 'rn-swipe-button';
-import theme from '../../constants/Theme';
+import { useTheme } from '../../providers/ThemeProvider';
 
 const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
 
@@ -34,6 +35,7 @@ export default function HomeScreen() {
   const swipeButtonRef = useRef<any>(null);
   const videoClient = useStreamVideoClient();
   const { user } = useAuth();
+  const { theme } = useTheme();
 
   useEffect(() => {
     // Clean up any leftover queue entries and calls when app loads
@@ -142,7 +144,7 @@ export default function HomeScreen() {
     console.log('✅ [VIDEO CLIENT] Video client is ready');
     setIsSearching(true);
     setStatus('Joining queue...');
-    console.log('🔄 [STATUS] Joining queue...');
+    console.log('� [STATUS] Joining queue...');
 
     try {
       console.log('📡 [API CALL] Calling random-match function with action: join_queue');
@@ -242,6 +244,63 @@ export default function HomeScreen() {
     }
   };
 
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      paddingTop: theme.spacing.lg,
+    },
+    topicLoadingContainer: {
+      padding: theme.spacing.lg,
+      alignItems: 'center',
+    },
+    callButtonSection: {
+      backgroundColor: theme.colors.backgroundDark,
+      paddingVertical: theme.spacing.xxl,
+      marginBottom: theme.spacing.lg,
+    },
+    callButtonContainer: {
+      alignItems: 'center',
+      paddingHorizontal: theme.spacing.lg,
+    },
+    swipeButtonWrapper: {
+      width: '85%',
+      maxWidth: 350,
+    },
+    swipeButtonContainer: {
+      borderRadius: theme.borderRadius.xxl,
+      borderWidth: 2,
+      borderColor: theme.colors.sliderBorder,
+      height: 60,
+      backgroundColor: theme.colors.sliderBackground,
+    },
+    searchingContainer: {
+      alignItems: 'center',
+      gap: theme.spacing.lg,
+    },
+    statusText: {
+      fontSize: theme.fontSize.xl,
+      color: theme.colors.primary,
+      fontWeight: '600',
+      marginTop: theme.spacing.md,
+    },
+    cancelButton: {
+      marginTop: theme.spacing.lg,
+      paddingVertical: theme.spacing.xs + 8,
+      paddingHorizontal: theme.spacing.lg + 12,
+      backgroundColor: theme.colors.error,
+      borderRadius: theme.borderRadius.xxl,
+    },
+    cancelButtonText: {
+      color: theme.colors.white,
+      fontSize: theme.fontSize.md,
+      fontWeight: '600',
+    },
+  });
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       <StatusBar style="auto" />
@@ -260,7 +319,7 @@ export default function HomeScreen() {
         <View style={styles.callButtonContainer}>
           {isSearching ? (
             <View style={styles.searchingContainer}>
-              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <WaitingAnimation />
               <Text style={styles.statusText}>{status}</Text>
               <Pressable style={styles.cancelButton} onPress={handleCancelSearch}>
                 <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -297,60 +356,3 @@ export default function HomeScreen() {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingTop: theme.spacing.lg,
-  },
-  topicLoadingContainer: {
-    padding: theme.spacing.lg,
-    alignItems: 'center',
-  },
-  callButtonSection: {
-    backgroundColor: theme.colors.backgroundDark,
-    paddingVertical: theme.spacing.xxl,
-    marginBottom: theme.spacing.lg,
-  },
-  callButtonContainer: {
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-  },
-  swipeButtonWrapper: {
-    width: '85%',
-    maxWidth: 350,
-  },
-  swipeButtonContainer: {
-    borderRadius: theme.borderRadius.xxl,
-    borderWidth: 2,
-    borderColor: theme.colors.sliderBorder,
-    height: 60,
-    backgroundColor: theme.colors.sliderBackground,
-  },
-  searchingContainer: {
-    alignItems: 'center',
-    gap: theme.spacing.lg,
-  },
-  statusText: {
-    fontSize: theme.fontSize.xl,
-    color: theme.colors.primary,
-    fontWeight: '600',
-    marginTop: theme.spacing.md,
-  },
-  cancelButton: {
-    marginTop: theme.spacing.lg,
-    paddingVertical: theme.spacing.xs + 8,
-    paddingHorizontal: theme.spacing.lg + 12,
-    backgroundColor: theme.colors.error,
-    borderRadius: theme.borderRadius.xxl,
-  },
-  cancelButtonText: {
-    color: theme.colors.white,
-    fontSize: theme.fontSize.md,
-    fontWeight: '600',
-  },
-});

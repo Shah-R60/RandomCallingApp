@@ -1,9 +1,96 @@
 // Central theme configuration for the app
+
+// Ideology-based color schemes for LIGHT mode
+export const ideologyColors = {
+  neutral: {
+    primary: '#1e1b4b', // Navy Blue
+    primaryLight: '#1e1b4b',
+    primaryDark: '#000060',
+  },
+  rightWing: {
+    primary: '#ec5e17ff', // Saffron
+    primaryLight: '#ec5e17ff',
+    primaryDark: '#ec5e17ff',
+  },
+  leftWing: {
+    primary: '#016109ff', // Green
+    primaryLight: '#016109ff',
+    primaryDark: '#016109ff',
+  },
+};
+
+// Ideology-based color schemes for DARK mode
+export const ideologyColorsDark = {
+  neutral: {
+    primary: '#1e1b4b', // Navy Blue
+    primaryLight: '#1e1b4b',
+    primaryDark: '#1e1b4b',
+  },
+  rightWing: {
+    primary: '#ec5e17ff', // Saffron
+    primaryLight: '#ec5e17ff',
+    primaryDark: '#ec5e17ff',
+  },
+  leftWing: {
+    primary: '#22C55E', // Brighter Green
+    primaryLight: '#4ADE80',
+    primaryDark: '#16A34A',
+  },
+};
+
+// Light theme colors
+export const lightThemeColors = {
+  background: '#f8f9fa',
+  backgroundLight: '#ffffff',
+  backgroundDark: '#e6e9f0',
+  
+  textPrimary: '#1f2937',
+  textSecondary: '#6b7280',
+  textLight: '#9ca3af',
+  
+  success: '#10b981',
+  error: '#ef4444',
+  warning: '#f59e0b',
+  info: '#3b82f6',
+  
+  white: '#ffffff',
+  black: '#000000',
+  border: '#d1d5db',
+  shadow: '#000000',
+  
+  sliderBackground: '#f3f4f6',
+  sliderBorder: '#d1d5db',
+};
+
+// Dark theme colors
+export const darkThemeColors = {
+  background: '#0f172a',      // Main dark background
+  backgroundLight: '#1e293b', // Card background
+  backgroundDark: '#020617',  // Darker sections
+  
+  textPrimary: '#f1f5f9',     // Bright white text
+  textSecondary: '#cbd5e1',   // Medium gray text (improved visibility)
+  textLight: '#94a3b8',       // Light gray text
+  
+  success: '#22c55e',
+  error: '#f87171',
+  warning: '#fbbf24',
+  info: '#60a5fa',
+  
+  white: '#ffffff',           // Pure white for icons/important text
+  black: '#000000',
+  border: '#334155',          // Subtle borders
+  shadow: '#000000',
+  
+  sliderBackground: '#334155',
+  sliderBorder: '#475569',
+};
+
 export const theme = {
   colors: {
-    // Primary colors
-    primary: '#0d094bff', // Navy Blue
-    primaryLight: '#0d094bff',
+    // Primary colors (default to neutral)
+    primary: '#000080', // Navy Blue
+    primaryLight: '#1e1b4b',
     primaryDark: '#000060',
     
     // Background colors

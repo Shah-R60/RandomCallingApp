@@ -27,6 +27,14 @@ export default function HomeLayout() {
               headerTintColor: theme.colors.white,
               headerTitleStyle: { fontWeight: 'bold', fontSize: 25 },
               headerTitleAlign: 'center',
+              headerLeft: () => (
+                <Pressable 
+                  onPress={() => router.push('/(home)/profile')}
+                  style={{ marginLeft: 15 }}
+                >
+                  <Ionicons name="person-circle-outline" size={32} color={theme.colors.white} />
+                </Pressable>
+              ),
               headerRight: () => (
                 <Pressable 
                   onPress={() => router.push('/(home)/settings')}
@@ -42,6 +50,16 @@ export default function HomeLayout() {
             options={{ 
               headerShown: true,
               title: 'Settings',
+              headerStyle: { backgroundColor: theme.colors.primary },
+              headerTintColor: theme.colors.white,
+              headerTitleStyle: { fontWeight: 'bold' }
+            }} 
+          />
+          <Stack.Screen 
+            name="profile" 
+            options={{ 
+              headerShown: true,
+              title: 'Profile',
               headerStyle: { backgroundColor: theme.colors.primary },
               headerTintColor: theme.colors.white,
               headerTitleStyle: { fontWeight: 'bold' }

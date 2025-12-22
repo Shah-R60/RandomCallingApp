@@ -17,6 +17,7 @@ function AudioCallUI() {
   const participants = useParticipants();
   const session = useCallSession();
   const [duration, setDuration] = useState(0);
+  const [showDisconnectMessage, setShowDisconnectMessage] = useState(false);
   const hasSeenOtherParticipantRef = useRef(false);
 
   const call = useCalls()[0];
@@ -49,16 +50,19 @@ function AudioCallUI() {
     }
     
     // Only show alert if we previously saw them and now they're gone
-    if (!otherParticipant && hasSeenOtherParticipantRef.current) {
+    if (!otherParticipant && hasSeenOtherParticipantRef.current && participants.length === 1) {
       console.log('👋 [PARTICIPANT LEFT] Other participant disconnected');
       hasSeenOtherParticipantRef.current = false; // Prevent multiple alerts
-      // Use setTimeout to defer Alert and prevent setState during render
+      
+      // Show disconnect message and auto-navigate after 2 seconds
       setTimeout(() => {
-        Alert.alert(
-          'Call Ended',
-          'The other person has left the call.',
-          [{ text: 'OK', onPress: handleEndCall }]
-        );
+        setShowDisconnectMessage(true);
+        
+        // Auto-navigate to home after showing message
+        setTimeout(async () => {
+          await call?.leave();
+          router.push('/(home)');
+        }, 2000);
       }, 100);
     }
   }, [participants, callingState]);
@@ -86,8 +90,8 @@ function AudioCallUI() {
     try {
       console.log('📞 [END CALL] Ending call and cleaning up...');
       
-      // Leave the call
-      await call?.leave();
+      // End the call for everyone (not just leave)
+      await call?.endCall();
       
       // Remove from queue
       await supabase.functions.invoke('random-match', {
@@ -125,6 +129,20 @@ function AudioCallUI() {
 
   return (
     <View style={styles.container}>
+      {/* Disconnect Message Overlay */}
+      {showDisconnectMessage && (
+        <View style={styles.disconnectOverlay}>
+          <View style={styles.disconnectCard}>
+            <Ionicons name="call-outline" size={48} color="#ef4444" />
+            <Text style={styles.disconnectTitle}>Call Ended</Text>
+            <Text style={styles.disconnectMessage}>The other person has left the call</Text>
+            <View style={styles.disconnectProgress}>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.disconnectSubtext}>Returning to home...</Text>
+            </View>
+          </View>
+        </View>
+      )}
       <View style={styles.content}>
         {/* Status */}
         <View style={styles.statusContainer}>
@@ -185,6 +203,7 @@ export default function CallScreen() {
   const call = calls[0];
   const hasJoinedRef = useRef(false);
   const navigatedRef = useRef(false);
+  const callIdRef = useRef<string | null>(null);
 
   // Suppress known harmless WebRTC teardown warnings
   useEffect(() => {
@@ -199,13 +218,21 @@ export default function CallScreen() {
       return;
     }
 
+    // Prevent rejoining same call if we already joined it
+    if (callIdRef.current === call.id) {
+      console.log('⏭️ [SKIP] Already joined this call:', call.id);
+      return;
+    }
+
     // Configure call for audio-only when joining
     const setupCall = async () => {
       try {
         console.log('🎧 [CALL SCREEN] Joining call...');
         console.log('🎧 [CALL STATE]:', call.state.callingState);
+        console.log('🎧 [CALL ID]:', call.id);
         
         hasJoinedRef.current = true;
+        callIdRef.current = call.id;
         
         await call.join({
           create: false,
@@ -219,6 +246,7 @@ export default function CallScreen() {
       } catch (error) {
         console.error('❌ [ERROR] Error setting up audio call:', error);
         hasJoinedRef.current = false;
+        callIdRef.current = null;
       }
     };
 
@@ -332,5 +360,47 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
+  },
+  disconnectOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  disconnectCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
+    minWidth: 280,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  disconnectTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  disconnectMessage: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  disconnectProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  disconnectSubtext: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.7)',
   },
 });

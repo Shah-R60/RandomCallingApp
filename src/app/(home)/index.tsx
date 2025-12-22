@@ -8,6 +8,7 @@ import { useStreamVideoClient } from '@stream-io/video-react-native-sdk';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../providers/AuthProvider';
 import TopicCard, { TopicReference } from '../../components/TopicCard';
+import TopicCardSkeleton from '../../components/TopicCardSkeleton';
 import SwipeButton from 'rn-swipe-button';
 import { useTheme } from '../../providers/ThemeProvider';
 
@@ -38,8 +39,14 @@ export default function HomeScreen() {
   const { theme } = useTheme();
 
   useEffect(() => {
-    // Clean up any leftover queue entries and calls when app loads
-    cleanupOnMount();
+    // Only cleanup on initial mount, not every time we come back from call
+    const cleanup = async () => {
+      // Just remove from queue, don't touch active calls
+      await supabase.functions.invoke('random-match', {
+        body: { action: 'leave_queue' }
+      }).catch(() => {});
+    };
+    cleanup();
     // Fetch today's topic
     fetchNewestTopic();
   }, []);
@@ -60,35 +67,7 @@ export default function HomeScreen() {
     }
   };
 
-  const cleanupOnMount = async () => {
-    try {
-      console.log('🧹 [CLEANUP] Cleaning up on mount...');
-      
-      // Only cleanup old calls that are not actively joined
-      if (videoClient) {
-        const calls = videoClient.state.calls;
-        for (const call of calls) {
-          const state = call.state.callingState;
-          // Only cleanup idle/left calls, not active ones
-          if (state === 'idle' || state === 'left') {
-            console.log('🚪 [CLEANUP] Leaving idle call:', call.id);
-            await call.leave().catch(err => console.log('Call leave error (expected):', err));
-          } else {
-            console.log('⏭️ [CLEANUP] Skipping active call:', call.id, 'state:', state);
-          }
-        }
-      }
-      
-      // Remove from queue if present (safe to always try)
-      await supabase.functions.invoke('random-match', {
-        body: { action: 'leave_queue' }
-      }).catch(err => console.log('Queue leave error (expected):', err));
-      
-      console.log('✅ [CLEANUP] Cleanup complete');
-    } catch (error) {
-      console.error('❌ [CLEANUP ERROR]:', error);
-    }
-  };
+
 
   const checkQueueStatus = async () => {
     try {
@@ -307,9 +286,7 @@ export default function HomeScreen() {
 
       {/* Today's Topic */}
       {topicLoading ? (
-        <View style={styles.topicLoadingContainer}>
-          <ActivityIndicator size="small" color={theme.colors.primary} />
-        </View>
+        <TopicCardSkeleton />
       ) : topic ? (
         <TopicCard topic={topic} />
       ) : null}

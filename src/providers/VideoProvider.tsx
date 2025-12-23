@@ -4,47 +4,55 @@ import {
 } from '@stream-io/video-react-native-sdk';
 import { PropsWithChildren, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { tokenProvider } from '../utils/TokenProvider';
 import { useAuth } from './AuthProvider';
-import { supabase } from '../lib/supabase';
 
-const apiKey = process.env.EXPO_PUBLIC_STREAM_API_KEY;
+const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
 
 export default function VideoProvider({ children }: PropsWithChildren) {
-  const [videoClient, setVideoClient] = useState<StreamVideoClient | null>(
-    null
-  );
-  const { profile } = useAuth();
+  const [videoClient, setVideoClient] = useState<StreamVideoClient | null>(null);
+  const { user, accessToken } = useAuth();
 
   useEffect(() => {
-    if (!profile) {
+    if (!user || !accessToken) {
       return;
     }
 
     const initVideoClient = async () => {
       try {
-        const user = {
-          id: profile.id,
-          name: profile.full_name,
-          image: profile.avatar_url 
-            ? supabase.storage.from('avatars').getPublicUrl(profile.avatar_url).data.publicUrl
-            : undefined,
-        };
-        
-        // Initialize client with audio-only configuration
-        const client = new StreamVideoClient({ 
-          apiKey, 
-          user, 
-          tokenProvider,
+        // Fetch Stream token from backend
+        const response = await fetch(`${BACKEND_URL}/api/users/stream-token`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+          console.error('❌ Failed to get Stream token:', result.message);
+          return;
+        }
+
+        const { streamToken, streamUserId, streamApiKey, userName, userImage } = result.data;
+
+        // Initialize Stream client with token from backend
+        const client = new StreamVideoClient({
+          apiKey: streamApiKey,
+          user: {
+            id: streamUserId,
+            name: userName,
+            image: userImage,
+          },
+          token: streamToken,
           options: {
             logLevel: 'info',
-          }
+          },
         });
-        
+
         setVideoClient(client);
+        console.log('✅ Stream Video Client initialized');
       } catch (error) {
-        console.error('❌ Error initializing Audio Client:', error);
-        console.error('Audio calls will not work. Check network connectivity.');
+        console.error('❌ Error initializing Stream Video Client:', error);
       }
     };
 
@@ -53,9 +61,10 @@ export default function VideoProvider({ children }: PropsWithChildren) {
     return () => {
       if (videoClient) {
         videoClient.disconnectUser();
+        setVideoClient(null);
       }
     };
-  }, [profile?.id]);
+  }, [user?.id, accessToken]);
 
   if (!videoClient) {
     return (

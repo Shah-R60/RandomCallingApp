@@ -1,64 +1,114 @@
-import {supabase} from '../lib/supabase'
-import React ,  {useEffect,PropsWithChildren , createContext, useState, useContext } from 'react'
-import { Session, User } from '@supabase/supabase-js'
+import React, { useEffect, PropsWithChildren, createContext, useState, useContext } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
+
+type User = {
+    _id: string;
+    email: string;
+    name: string;
+    picture: string;
+    stars: number;
+    createdAt: string;
+    updatedAt: string;
+}
 
 type AuthContext = {
-    session: Session | null;
     user: User | null;
-    profile: any | null; // Adjust the type as per your profile structure
-}
-const AuthContext = createContext<AuthContext >({
-    session: null,
-    user:null,
-    profile:null
-})
-const AuthProvider = ({children}:PropsWithChildren) => {
-
-    const [session, setSession] = useState<Session | null>(null)  
-    const [profile , setProfile] = useState(null)
-    useEffect(() => {  
-          supabase.auth.getSession().then(({ data: { session } }) =>
-             {      setSession(session)    })   
-           supabase.auth.onAuthStateChange((_event, session) => {      
-            setSession(session)    })  }, [])
-
-    useEffect(()=>{
-      if(!session?.user){
-        setProfile(null);
-        return
-      }
-
-      const fetchProfile = async () => {
-       try{
-         const { data, error } = await supabase
-           .from('profiles')
-           .select('*')
-           .eq('id', session.user.id)
-           .single();
-
-         if(data){
-           setProfile(data);
-         }
-       }
-       catch (error) {
-         console.error('Error fetching profile:', error);
-       }
-      
-      };
-
-      fetchProfile();
-    }, [session?.user]);
-
-    console.log(profile);
-
-  return (
-    <AuthContext.Provider value={{ session , user: session?.user , profile }}>
-      {children}
-    </AuthContext.Provider>
-  );
+    accessToken: string | null;
+    refreshToken: string | null;
+    signOut: () => Promise<void>;
+    refreshUserData: () => Promise<void>;
 }
 
-export default AuthProvider
+const AuthContext = createContext<AuthContext>({
+    user: null,
+    accessToken: null,
+    refreshToken: null,
+    signOut: async () => {},
+    refreshUserData: async () => {}
+});
 
+const AuthProvider = ({ children }: PropsWithChildren) => {
+    const [user, setUser] = useState<User | null>(null);
+    const [accessToken, setAccessToken] = useState<string | null>(null);
+    const [refreshToken, setRefreshToken] = useState<string | null>(null);
+
+    useEffect(() => {
+        loadStoredAuth();
+    }, []);
+
+    const loadStoredAuth = async () => {
+        try {
+            const storedAccessToken = await AsyncStorage.getItem('@access_token');
+            const storedRefreshToken = await AsyncStorage.getItem('@refresh_token');
+            const storedUser = await AsyncStorage.getItem('@user');
+
+            if (storedAccessToken && storedUser) {
+                setAccessToken(storedAccessToken);
+                setRefreshToken(storedRefreshToken);
+                setUser(JSON.parse(storedUser));
+                
+                // Refresh user data on app load
+                await refreshUserData(storedAccessToken);
+            }
+        } catch (error) {
+            console.error('Error loading stored auth:', error);
+        }
+    };
+
+    const refreshUserData = async (token?: string) => {
+        try {
+            const currentToken = token || accessToken;
+            if (!currentToken) return;
+
+            const response = await fetch(`${BACKEND_URL}/api/users/me`, {
+                headers: {
+                    'Authorization': `Bearer ${currentToken}`,
+                },
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success && result.data) {
+                    setUser(result.data);
+                    await AsyncStorage.setItem('@user', JSON.stringify(result.data));
+                }
+            }
+        } catch (error) {
+            console.error('Error refreshing user data:', error);
+        }
+    };
+
+    const signOut = async () => {
+        try {
+            // Call backend logout if needed
+            if (accessToken) {
+                await fetch(`${BACKEND_URL}/api/users/logout`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                }).catch(() => {});
+            }
+
+            // Clear local storage
+            await AsyncStorage.multiRemove(['@access_token', '@refresh_token', '@user']);
+            setUser(null);
+            setAccessToken(null);
+            setRefreshToken(null);
+        } catch (error) {
+            console.error('Error signing out:', error);
+        }
+    };
+
+    return (
+        <AuthContext.Provider value={{ user, accessToken, refreshToken, signOut, refreshUserData }}>
+            {children}
+        </AuthContext.Provider>
+    );
+}
+
+export default AuthProvider;
 
 export const useAuth = () => useContext(AuthContext);

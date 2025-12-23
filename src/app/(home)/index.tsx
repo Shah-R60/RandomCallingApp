@@ -5,7 +5,6 @@ import React, { useState, useEffect, useRef } from "react";
 import WaitingAnimation from '../../components/WaitingAnimation';
 import { Ionicons } from '@expo/vector-icons';
 import { useStreamVideoClient } from '@stream-io/video-react-native-sdk';
-import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../providers/AuthProvider';
 import TopicCard, { TopicReference } from '../../components/TopicCard';
 import TopicCardSkeleton from '../../components/TopicCardSkeleton';
@@ -35,18 +34,10 @@ export default function HomeScreen() {
   const [topicLoading, setTopicLoading] = useState(true);
   const swipeButtonRef = useRef<any>(null);
   const videoClient = useStreamVideoClient();
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const { theme } = useTheme();
 
   useEffect(() => {
-    // Only cleanup on initial mount, not every time we come back from call
-    const cleanup = async () => {
-      // Just remove from queue, don't touch active calls
-      await supabase.functions.invoke('random-match', {
-        body: { action: 'leave_queue' }
-      }).catch(() => {});
-    };
-    cleanup();
     // Fetch today's topic
     fetchNewestTopic();
   }, []);
@@ -54,7 +45,11 @@ export default function HomeScreen() {
   const fetchNewestTopic = async () => {
     try {
       setTopicLoading(true);
-      const response = await fetch(`${BACKEND_URL}/api/topic/getNewestTopic`);
+      const response = await fetch(`${BACKEND_URL}/api/topic/getNewestTopic`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
       const result = await response.json();
       
       if (result.success && result.data) {
@@ -69,50 +64,8 @@ export default function HomeScreen() {
 
 
 
-  const checkQueueStatus = async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke('random-match', {
-        body: { action: 'check_status' }
-      });
-
-      if (data?.status === 'waiting') {
-        setIsSearching(true);
-        setStatus('Searching for someone...');
-        startPolling();
-      } else if (data?.status === 'matched') {
-        // Join the call
-        await joinCall(data.queueEntry.call_id, data.queueEntry.matched_with);
-      }
-    } catch (error) {
-      console.error('Error checking queue status:', error);
-    }
-  };
-
-  const startPolling = () => {
-    const interval = setInterval(async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke('random-match', {
-          body: { action: 'check_status' }
-        });
-
-        if (data?.status === 'matched') {
-          clearInterval(interval);
-          setIsSearching(false);
-          await joinCall(data.queueEntry.call_id, data.queueEntry.matched_with);
-        }
-      } catch (error) {
-        console.error('Error polling queue:', error);
-        clearInterval(interval);
-      }
-    }, 2000); // Poll every 2 seconds
-
-    // Store interval ID to clear it later
-    return interval;
-  };
-
   const handleFindRandomUser = async () => {
     console.log('🔘 [BUTTON CLICK] Find Someone to Talk button pressed');
-    console.log('📱 [USER INFO] User ID:', user?.id);
     
     if (!videoClient) {
       console.error('❌ [ERROR] Video client not initialized');
@@ -120,62 +73,79 @@ export default function HomeScreen() {
       return;
     }
 
-    console.log('✅ [VIDEO CLIENT] Video client is ready');
     setIsSearching(true);
     setStatus('Joining queue...');
-    console.log('� [STATUS] Joining queue...');
 
     try {
-      console.log('📡 [API CALL] Calling random-match function with action: join_queue');
-      const { data, error } = await supabase.functions.invoke('random-match', {
-        body: { action: 'join_queue' }
+      // Join matchmaking queue
+      const response = await fetch(`${BACKEND_URL}/api/matchmaking/join`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
       });
 
-      console.log('📥 [API RESPONSE] Data:', JSON.stringify(data, null, 2));
-      console.log('📥 [API RESPONSE] Error:', error);
+      const result = await response.json();
 
-      if (error) {
-        console.error('❌ [ERROR] Supabase function error:', error);
-        throw error;
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to join queue');
       }
 
-      if (data.status === 'matched') {
+      if (result.data.status === 'matched') {
         console.log('🎉 [MATCH FOUND] Immediately matched!');
-        console.log('👤 [MATCH INFO] Matched with:', data.matchedWith);
-        console.log('📞 [CALL INFO] Call ID:', data.callId);
         setStatus('Match found!');
-        await joinCall(data.callId, data.matchedWith);
-      } else if (data.status === 'waiting') {
+        await joinCall(result.data.callId, result.data.matchedWith);
+      } else if (result.data.status === 'waiting') {
         console.log('⏳ [WAITING] Added to queue, starting to poll...');
         setStatus('Searching for someone...');
         startPolling();
       }
     } catch (error) {
       console.error('❌ [ERROR] Error joining queue:', error);
-      console.error('❌ [ERROR DETAILS]:', JSON.stringify(error, null, 2));
       Alert.alert('Error', 'Failed to join queue. Please try again.');
       setIsSearching(false);
       setStatus('');
     }
   };
 
+  const startPolling = () => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/matchmaking/status`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        });
+
+        const result = await response.json();
+
+        if (result.data.status === 'matched') {
+          clearInterval(interval);
+          setIsSearching(false);
+          await joinCall(result.data.queueEntry.call_id, result.data.queueEntry.matched_with);
+        }
+      } catch (error) {
+        console.error('Error polling queue:', error);
+        clearInterval(interval);
+        setIsSearching(false);
+        setStatus('');
+      }
+    }, 2000);
+  };
+
   const joinCall = async (callId: string, otherUserId: string) => {
     try {
       console.log('📞 [JOIN CALL] Starting call setup...');
-      console.log('📞 [CALL ID]:', callId);
-      console.log('👤 [OTHER USER]:', otherUserId);
       setStatus('Connecting...');
       
       // Create call with audio-only settings
       const call = videoClient?.call('default', callId);
-      console.log('✅ [CALL OBJECT] Call object created:', call ? 'Success' : 'Failed');
       
-      console.log('🔧 [CALL SETUP] Creating call with settings...');
       await call?.getOrCreate({
         ring: false,
         data: {
           members: [
-            { user_id: user.id },
+            { user_id: user._id },
             { user_id: otherUserId }
           ],
           settings_override: {
@@ -186,22 +156,15 @@ export default function HomeScreen() {
             video: { 
               camera_default_on: false,
               enabled: false,
-              target_resolution: {
-                width: 240,
-                height: 240
-              }
             }
           }
         }
       });
 
       console.log('✅ [CALL CREATED] Call created successfully');
-      console.log('🚀 [NAVIGATION] Navigating to call screen...');
-      // Navigate to call screen
       router.push('/call');
     } catch (error) {
       console.error('❌ [ERROR] Error joining call:', error);
-      console.error('❌ [ERROR DETAILS]:', JSON.stringify(error, null, 2));
       Alert.alert('Error', 'Failed to connect to call');
       setIsSearching(false);
       setStatus('');
@@ -211,15 +174,18 @@ export default function HomeScreen() {
   const handleCancelSearch = async () => {
     console.log('🛑 [CANCEL] User cancelled search');
     try {
-      console.log('📡 [API CALL] Leaving queue...');
-      await supabase.functions.invoke('random-match', {
-        body: { action: 'leave_queue' }
+      await fetch(`${BACKEND_URL}/api/matchmaking/leave`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
       });
-      console.log('✅ [SUCCESS] Left queue successfully');
       setIsSearching(false);
       setStatus('');
     } catch (error) {
       console.error('❌ [ERROR] Error leaving queue:', error);
+      setIsSearching(false);
+      setStatus('');
     }
   };
 

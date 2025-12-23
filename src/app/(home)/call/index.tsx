@@ -9,7 +9,9 @@ import { router } from 'expo-router';
 import { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert, LogBox } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../../../lib/supabase';
+import { useAuth } from '../../../providers/AuthProvider';
+
+const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
 
 function AudioCallUI() {
   const { useCallCallingState, useParticipants, useCallSession } = useCallStateHooks();
@@ -19,6 +21,7 @@ function AudioCallUI() {
   const [duration, setDuration] = useState(0);
   const [showDisconnectMessage, setShowDisconnectMessage] = useState(false);
   const hasSeenOtherParticipantRef = useRef(false);
+  const { accessToken } = useAuth();
 
   const call = useCalls()[0];
 
@@ -93,10 +96,15 @@ function AudioCallUI() {
       // End the call for everyone (not just leave)
       await call?.endCall();
       
-      // Remove from queue
-      await supabase.functions.invoke('random-match', {
-        body: { action: 'leave_queue' }
-      });
+      // Remove from matchmaking queue
+      if (accessToken) {
+        await fetch(`${BACKEND_URL}/api/matchmaking/leave`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        }).catch(() => {});
+      }
       
       console.log('✅ [END CALL] Cleanup complete');
     } catch (error) {

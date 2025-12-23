@@ -3,15 +3,14 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../providers/AuthProvider';
 import { useTheme } from '../../providers/ThemeProvider';
-import { supabase } from '../../lib/supabase';
 
 export default function ProfileScreen() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { theme } = useTheme();
 
   const handleSignOut = async () => {
     try {
-      await supabase.auth.signOut();
+      await signOut();
       router.replace('/(auth)/login');
     } catch (error) {
       console.error('Error signing out:', error);
@@ -111,7 +110,7 @@ export default function ProfileScreen() {
         <View style={styles.avatarContainer}>
           <Ionicons name="person" size={60} color={theme.colors.primary} />
         </View>
-        <Text style={styles.userName}>{user?.user_metadata?.name || 'User'}</Text>
+        <Text style={styles.userName}>{user?.name || 'User'}</Text>
         <Text style={styles.userEmail}>{user?.email}</Text>
       </View>
 
@@ -134,7 +133,7 @@ export default function ProfileScreen() {
             </View>
             <Text style={styles.menuText}>Member Since</Text>
             <Text style={[styles.menuText, { flex: 0, color: theme.colors.textSecondary }]}>
-              {new Date(user?.created_at || '').toLocaleDateString()}
+              {new Date(user?.createdAt || '').toLocaleDateString()}
             </Text>
           </Pressable>
         </View>

@@ -25,7 +25,6 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.RECORD_AUDIO",
@@ -44,6 +43,7 @@
     },
     "plugins": [
       "expo-router",
+      "@react-native-google-signin/google-signin",
       "expo-av",
       [
         "react-native-permissions",
@@ -68,9 +68,7 @@
           "cameraPermission": false,
           "microphonePermission": "$(PRODUCT_NAME) requires microphone access in order to capture and transmit audio"
         }
-      ],
-      "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      ]
     ]
   }
 }

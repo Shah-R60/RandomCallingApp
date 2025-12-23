@@ -41,6 +41,20 @@ export default function ChannelScreen() {
       ring: true,
       data: {
         members,
+        settings_override: {
+          audio: { 
+            mic_default_on: true,
+            default_device: 'speaker'
+          },
+          video: { 
+            camera_default_on: false,
+            enabled: false,
+            target_resolution: {
+              width: 240,
+              height: 240
+            }
+          }
+        }
       },
     });
 

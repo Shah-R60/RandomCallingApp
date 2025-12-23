@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { useAuth } from '../../providers/AuthProvider';
 
 const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
 
@@ -12,6 +13,7 @@ const WEB_CLIENT_ID = '998717722682-ro60kjsam98nm9bk69srbr9io85oav58.apps.google
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
+  const { setAuthData } = useAuth();
   useEffect(() => {
     GoogleSignin.configure({
       webClientId: WEB_CLIENT_ID,
@@ -64,9 +66,8 @@ export default function LoginScreen() {
       console.log('Backend response data:', result);
 
       if (result.success) {
-        await AsyncStorage.setItem('@access_token', result.data.Accesstoken);
-        await AsyncStorage.setItem('@refresh_token', result.data.refreshToken);
-        await AsyncStorage.setItem('@user', JSON.stringify(result.data.user));
+        // Update AuthProvider context with the user data
+        await setAuthData(result.data.user, result.data.Accesstoken, result.data.refreshToken);
         router.replace('/(home)');
       } else {
         Alert.alert('Error', result.message || 'Failed to login');

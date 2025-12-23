@@ -1,11 +1,13 @@
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, Pressable, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import React, { useState, useEffect, useRef } from "react";
+import Toast from 'react-native-toast-message';
 import WaitingAnimation from '../../components/WaitingAnimation';
 import { Ionicons } from '@expo/vector-icons';
 import { useStreamVideoClient } from '@stream-io/video-react-native-sdk';
 import { useAuth } from '../../providers/AuthProvider';
+import { useTopic } from '../../providers/TopicProvider';
 import TopicCard, { TopicReference } from '../../components/TopicCard';
 import TopicCardSkeleton from '../../components/TopicCardSkeleton';
 import SwipeButton from 'rn-swipe-button';
@@ -13,63 +15,42 @@ import { useTheme } from '../../providers/ThemeProvider';
 
 const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
 
-interface Topic {
-  _id: string;
-  title: string;
-  image: string;
-  description: Array<{
-    type: 'text' | 'image' | 'video';
-    content: string;
-    order: number;
-    _id: string;
-  }>;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export default function HomeScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [status, setStatus] = useState<string>('');
-  const [topic, setTopic] = useState<Topic | null>(null);
-  const [topicLoading, setTopicLoading] = useState(true);
   const swipeButtonRef = useRef<any>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const videoClient = useStreamVideoClient();
   const { user, accessToken } = useAuth();
+  const { topic, loading: topicLoading } = useTopic();
   const { theme } = useTheme();
 
+  // Cleanup polling on unmount
   useEffect(() => {
-    // Fetch today's topic
-    fetchNewestTopic();
-  }, []);
-
-  const fetchNewestTopic = async () => {
-    try {
-      setTopicLoading(true);
-      const response = await fetch(`${BACKEND_URL}/api/topic/getNewestTopic`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      });
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        setTopic(result.data);
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearTimeout(pollingIntervalRef.current);
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
       }
-    } catch (error) {
-      console.error('Error fetching topic:', error);
-    } finally {
-      setTopicLoading(false);
-    }
-  };
-
-
+    };
+  }, []);
 
   const handleFindRandomUser = async () => {
     console.log('🔘 [BUTTON CLICK] Find Someone to Talk button pressed');
     
     if (!videoClient) {
       console.error('❌ [ERROR] Video client not initialized');
-      Alert.alert('Error', 'Video client not initialized');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Video client not initialized',
+        position: 'bottom',
+        visibilityTime: 3000,
+        props: {
+          style: { borderRadius: 20 }
+        }
+      });
       return;
     }
 
@@ -96,21 +77,44 @@ export default function HomeScreen() {
         setStatus('Match found!');
         await joinCall(result.data.callId, result.data.matchedWith);
       } else if (result.data.status === 'waiting') {
-        console.log('⏳ [WAITING] Added to queue, starting to poll...');
+        console.log('⏳ [WAITING] Added to queue, starting to check for matches...');
         setStatus('Searching for someone...');
-        startPolling();
+        // Start polling with exponential backoff
+        startPolling(3000); // Start with 3 seconds
       }
     } catch (error) {
       console.error('❌ [ERROR] Error joining queue:', error);
-      Alert.alert('Error', 'Failed to join queue. Please try again.');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to join queue. Please try again.',
+        position: 'bottom',
+        visibilityTime: 3000,
+        props: {
+          style: { borderRadius: 20 }
+        }
+      });
       setIsSearching(false);
       setStatus('');
     }
   };
 
-  const startPolling = () => {
-    const interval = setInterval(async () => {
+  const startPolling = (initialDelay: number = 3000) => {
+    // Clear any existing interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
+    let currentDelay = initialDelay;
+    const maxDelay = 10000; // Max 10 seconds between checks
+    let pollCount = 0;
+    const maxPolls = 1; // ~59 seconds total (approximately 1 minute)
+
+    const poll = async () => {
       try {
+        pollCount++;
+        console.log(`🔄 [POLLING ${pollCount}/${maxPolls}] Checking queue status... (delay: ${currentDelay}ms)`);
+        
         const response = await fetch(`${BACKEND_URL}/api/matchmaking/status`, {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -118,19 +122,78 @@ export default function HomeScreen() {
         });
 
         const result = await response.json();
+        console.log('📊 [POLLING RESULT] Status:', result.data.status);
 
         if (result.data.status === 'matched') {
-          clearInterval(interval);
-          setIsSearching(false);
+          console.log('🎉 [MATCH FOUND] Match found during polling!');
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          setStatus('Match found!');
           await joinCall(result.data.queueEntry.call_id, result.data.queueEntry.matched_with);
+        } else if (result.data.status === 'not_in_queue') {
+          console.log('⚠️ [NOT IN QUEUE] User removed from queue');
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          setIsSearching(false);
+          setStatus('');
+        } else if (pollCount >= maxPolls) {
+          console.log('⏱️ [TIMEOUT] Maximum polling attempts reached (~1 minute)');
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          
+          // Leave the queue
+          try {
+            await fetch(`${BACKEND_URL}/api/matchmaking/leave`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+              },
+            });
+          } catch (err) {
+            console.error('Error leaving queue:', err);
+          }
+          
+          setIsSearching(false);
+          setStatus('');
+          
+          Toast.show({
+            type: 'info',
+            // text1: 'No Match Found',
+            text2: 'Could not find a match. Please try again later.',
+            position: 'bottom',
+            visibilityTime: 4000,
+            props: {
+              style: { borderRadius: 20, innerWidth: '100%',outerHeight: '100%', }
+            }
+          });
+        } else {
+          // Exponential backoff: increase delay gradually
+          currentDelay = Math.min(currentDelay * 1.2, maxDelay);
+          // Schedule next poll
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+          }
+          pollingIntervalRef.current = setTimeout(poll, currentDelay) as any;
         }
       } catch (error) {
-        console.error('Error polling queue:', error);
-        clearInterval(interval);
+        console.error('❌ [POLLING ERROR] Error polling queue:', error);
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
         setIsSearching(false);
         setStatus('');
       }
-    }, 2000);
+    };
+
+    // Start the first poll
+    pollingIntervalRef.current = setTimeout(poll, currentDelay) as any;
   };
 
   const joinCall = async (callId: string, otherUserId: string) => {
@@ -156,6 +219,10 @@ export default function HomeScreen() {
             video: { 
               camera_default_on: false,
               enabled: false,
+              target_resolution: {
+                width: 240,
+                height: 240
+              }
             }
           }
         }
@@ -173,6 +240,14 @@ export default function HomeScreen() {
 
   const handleCancelSearch = async () => {
     console.log('🛑 [CANCEL] User cancelled search');
+    
+    // Clear polling interval/timeout
+    if (pollingIntervalRef.current) {
+      clearTimeout(pollingIntervalRef.current);
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    
     try {
       await fetch(`${BACKEND_URL}/api/matchmaking/leave`, {
         method: 'POST',

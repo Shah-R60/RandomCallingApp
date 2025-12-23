@@ -1,10 +1,12 @@
 import { Redirect, Stack, router } from 'expo-router';
-import { Pressable } from 'react-native';
+import { Pressable, View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Toast, { BaseToast, ErrorToast, InfoToast } from 'react-native-toast-message';
 import { useAuth } from '../../providers/AuthProvider';
 import VideoProvider from '../../providers/VideoProvider';
 import CallProvider from '../../providers/CallProvider';
 import { useTheme } from '../../providers/ThemeProvider';
+import { TopicProvider } from '../../providers/TopicProvider';
 
 export default function HomeLayout() {
   const { user } = useAuth();
@@ -17,7 +19,8 @@ export default function HomeLayout() {
   return (
     <VideoProvider>
       <CallProvider>
-        <Stack>
+        <TopicProvider>
+          <Stack>
           <Stack.Screen 
             name="index" 
             options={{ 
@@ -81,7 +84,36 @@ export default function HomeLayout() {
             }} 
           />
         </Stack>
+        </TopicProvider>
       </CallProvider>
+      <Toast 
+        config={{
+          success: (props) => (
+            <BaseToast
+              {...props}
+              style={{ borderRadius: 20, width: '95%', marginBottom: 10, height: 50 }}
+              text1Style={{ textAlign: 'center', fontSize: 13}}
+              text2Style={{ textAlign: 'center', fontSize: 13 }}
+            />
+          ),
+          error: (props) => (
+            <ErrorToast
+              {...props}
+              style={{ borderRadius: 20, width: '95%', marginBottom: 10, height: 50 }}
+              text1Style={{ textAlign: 'center', fontSize: 13 }}
+              text2Style={{ textAlign: 'center', fontSize: 13 }}
+            />
+          ),
+          info: (props) => (
+            <InfoToast
+              {...props}
+              style={{ borderRadius: 20, width: '95%', marginBottom: 10, height: 50 }}
+              text1Style={{ textAlign: 'center', fontSize: 13 }}
+              text2Style={{ textAlign: 'center', fontSize: 13 }}
+            />
+          ),
+        }}
+      />
     </VideoProvider>
   );
 }

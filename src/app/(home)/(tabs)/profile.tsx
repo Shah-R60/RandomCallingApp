@@ -6,15 +6,26 @@ import { Session } from '@supabase/supabase-js'
 import { useAuth } from '../../../providers/AuthProvider'
 import Avatar from '../../../components/Avatar'
 import { ScrollView } from 'react-native-gesture-handler'
+import { router } from 'expo-router'
 import React from 'react'
 export default function Account() {
-  const { session } = useAuth();
+  const { session, signOut } = useAuth();
   const [loading, setLoading] = useState(true)
   const [fullName ,setFullName] = useState('')
   const [username, setUsername] = useState('')
   const [website, setWebsite] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   console.log('/tab/profile page')
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.replace('/(auth)/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      Alert.alert('Error', 'Failed to sign out');
+    }
+  };
 
   useEffect(() => {
     if (session) getProfile()
@@ -124,7 +135,7 @@ export default function Account() {
       </View>
 
       <View style={styles.verticallySpaced}>
-        <Button title="Sign Out" onPress={() => supabase.auth.signOut()} />
+        <Button title="Sign Out" onPress={handleSignOut} />
       </View>
     </View>
     </ScrollView>

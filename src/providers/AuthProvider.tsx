@@ -1,6 +1,7 @@
 import React, { useEffect, PropsWithChildren, createContext, useState, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import axiosInstance from '../utils/axiosInstance';
 
 const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
 
@@ -65,21 +66,16 @@ const AuthProvider = ({ children }: PropsWithChildren) => {
             const currentToken = token || accessToken;
             if (!currentToken) return;
 
-            const response = await fetch(`${BACKEND_URL}/api/users/me`, {
-                headers: {
-                    'Authorization': `Bearer ${currentToken}`,
-                },
-            });
+            // Use axios instance with auto-refresh
+            const response = await axiosInstance.get('/api/users/me');
 
-            if (response.ok) {
-                const result = await response.json();
-                if (result.success && result.data) {
-                    setUser(result.data);
-                    await AsyncStorage.setItem('@user', JSON.stringify(result.data));
-                }
+            if (response.data.success && response.data.data) {
+                setUser(response.data.data);
+                await AsyncStorage.setItem('@user', JSON.stringify(response.data.data));
             }
         } catch (error) {
             console.error('Error refreshing user data:', error);
+            // If refresh fails, user might need to login again
         }
     };
 

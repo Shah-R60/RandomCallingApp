@@ -10,6 +10,7 @@ import { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert, LogBox } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../providers/AuthProvider';
+import Toast from 'react-native-toast-message';
 
 const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
 
@@ -21,13 +22,19 @@ function AudioCallUI() {
   const [duration, setDuration] = useState(0);
   const [showDisconnectMessage, setShowDisconnectMessage] = useState(false);
   const hasSeenOtherParticipantRef = useRef(false);
-  const { accessToken } = useAuth();
+  const { accessToken, refreshUserData } = useAuth();
+  const callStartTimeRef = useRef<number | null>(null);
 
   const call = useCalls()[0];
 
   // Monitor duration
   useEffect(() => {
     if (callingState === CallingState.JOINED && session) {
+      // Record call start time
+      if (!callStartTimeRef.current) {
+        callStartTimeRef.current = Date.now();
+      }
+
       const interval = setInterval(() => {
         const startTime = session.started_at ? new Date(session.started_at).getTime() : Date.now();
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
@@ -110,6 +117,26 @@ function AudioCallUI() {
     } catch (error) {
       console.error('❌ [END CALL ERROR]:', error);
     } finally {
+      // Refresh user data to get updated coin balance
+      console.log('🔄 [REFRESH] Refreshing user data...');
+      await refreshUserData();
+      
+      // Check if call was ended early (< 60 seconds) and show warning
+      if (callStartTimeRef.current) {
+        const callDuration = Math.floor((Date.now() - callStartTimeRef.current) / 1000);
+        console.log(`⏱️ [CALL DURATION] ${callDuration} seconds`);
+        
+        if (callDuration < 60) {
+          Toast.show({
+            type: 'error',
+            text1: '⚠️ Early Exit Penalty',
+            text2: '1 coin deducted for ending call before 1 minute',
+            position: 'bottom',
+            visibilityTime: 5000,
+          });
+        }
+      }
+      
       requestAnimationFrame(() => router.push('/(home)'));
       handleEndCall.isEnding = false;
     }

@@ -12,8 +12,7 @@ import TopicCard, { TopicReference } from '../../components/TopicCard';
 import TopicCardSkeleton from '../../components/TopicCardSkeleton';
 import SwipeButton from 'rn-swipe-button';
 import { useTheme } from '../../providers/ThemeProvider';
-
-const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
+import axiosInstance from '../../utils/axiosInstance';
 
 export default function HomeScreen() {
   const [isSearching, setIsSearching] = useState(false);
@@ -59,14 +58,8 @@ export default function HomeScreen() {
 
     try {
       // Join matchmaking queue
-      const response = await fetch(`${BACKEND_URL}/api/matchmaking/join`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      });
-
-      const result = await response.json();
+      const response = await axiosInstance.post('/api/matchmaking/join');
+      const result = response.data;
 
       if (!result.success) {
         throw new Error(result.message || 'Failed to join queue');
@@ -108,20 +101,15 @@ export default function HomeScreen() {
     let currentDelay = initialDelay;
     const maxDelay = 10000; // Max 10 seconds between checks
     let pollCount = 0;
-    const maxPolls = 1; // ~59 seconds total (approximately 1 minute)
+    const maxPolls = 15; // ~59 seconds total (approximately 1 minute)
 
     const poll = async () => {
       try {
         pollCount++;
         console.log(`🔄 [POLLING ${pollCount}/${maxPolls}] Checking queue status... (delay: ${currentDelay}ms)`);
         
-        const response = await fetch(`${BACKEND_URL}/api/matchmaking/status`, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-          },
-        });
-
-        const result = await response.json();
+        const response = await axiosInstance.get('/api/matchmaking/status');
+        const result = response.data;
         console.log('📊 [POLLING RESULT] Status:', result.data.status);
 
         if (result.data.status === 'matched') {
@@ -149,12 +137,7 @@ export default function HomeScreen() {
           
           // Leave the queue
           try {
-            await fetch(`${BACKEND_URL}/api/matchmaking/leave`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${accessToken}`,
-              },
-            });
+            await axiosInstance.post('/api/matchmaking/leave');
           } catch (err) {
             console.error('Error leaving queue:', err);
           }
@@ -232,7 +215,16 @@ export default function HomeScreen() {
       router.push('/call');
     } catch (error) {
       console.error('❌ [ERROR] Error joining call:', error);
-      Alert.alert('Error', 'Failed to connect to call');
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to connect to call',
+        position: 'bottom',
+        visibilityTime: 3000,
+        props: {
+          style: { borderRadius: 20 }
+        }
+      });
       setIsSearching(false);
       setStatus('');
     }
@@ -249,12 +241,7 @@ export default function HomeScreen() {
     }
     
     try {
-      await fetch(`${BACKEND_URL}/api/matchmaking/leave`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      });
+      await axiosInstance.post('/api/matchmaking/leave');
       setIsSearching(false);
       setStatus('');
     } catch (error) {

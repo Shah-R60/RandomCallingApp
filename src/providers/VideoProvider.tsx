@@ -5,8 +5,7 @@ import {
 import { PropsWithChildren, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from './AuthProvider';
-
-const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
+import axiosInstance from '../utils/axiosInstance';
 
 export default function VideoProvider({ children }: PropsWithChildren) {
   const [videoClient, setVideoClient] = useState<StreamVideoClient | null>(null);
@@ -20,13 +19,8 @@ export default function VideoProvider({ children }: PropsWithChildren) {
     const initVideoClient = async () => {
       try {
         // Fetch Stream token from backend
-        const response = await fetch(`${BACKEND_URL}/api/users/stream-token`, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-          },
-        });
-
-        const result = await response.json();
+        const response = await axiosInstance.get('/api/users/stream-token');
+        const result = response.data;
 
         if (!result.success) {
           console.error('❌ Failed to get Stream token:', result.message);
@@ -64,7 +58,7 @@ export default function VideoProvider({ children }: PropsWithChildren) {
         setVideoClient(null);
       }
     };
-  }, [user?.id, accessToken]);
+  }, [user?._id, accessToken]);
 
   if (!videoClient) {
     return (

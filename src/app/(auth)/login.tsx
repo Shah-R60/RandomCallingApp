@@ -5,8 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { useAuth } from '../../providers/AuthProvider';
-
-const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
+import axiosInstance from '../../utils/axiosInstance';
 
 // OAuth client IDs (must match google-services.json project)
 const WEB_CLIENT_ID = '998717722682-ro60kjsam98nm9bk69srbr9io85oav58.apps.googleusercontent.com';
@@ -47,22 +46,16 @@ export default function LoginScreen() {
       console.log('Google user info:', userInfo);
       console.log('Google access token:', accessToken);
 
-      const response = await fetch(`${BACKEND_URL}/auth/google`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: userInfo.email,
-          name: userInfo.name,
-          picture: userInfo.picture,
-          googleAccessToken: accessToken,
-        }),
+      const response = await axiosInstance.post('/auth/google', {
+        email: userInfo.email,
+        name: userInfo.name,
+        picture: userInfo.picture,
+        googleAccessToken: accessToken,
       });
 
       console.log('Backend response status:', response.status);
 
-      const result = await response.json();
+      const result = response.data;
       console.log('Backend response data:', result);
 
       if (result.success) {

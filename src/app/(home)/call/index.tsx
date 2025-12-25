@@ -11,6 +11,7 @@ import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert, LogBox } f
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../providers/AuthProvider';
 import Toast from 'react-native-toast-message';
+import axiosInstance from '../../../utils/axiosInstance';
 
 const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
 
@@ -105,12 +106,7 @@ function AudioCallUI() {
       
       // Remove from matchmaking queue
       if (accessToken) {
-        await fetch(`${BACKEND_URL}/api/matchmaking/leave`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-          },
-        }).catch(() => {});
+        await axiosInstance.post('/api/matchmaking/leave').catch(() => {});
       }
       
       console.log('✅ [END CALL] Cleanup complete');

@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider';
-
-const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
+import axiosInstance from '../utils/axiosInstance';
 
 interface Topic {
   _id: string;
@@ -49,12 +48,8 @@ export const TopicProvider = ({ children }: { children: React.ReactNode }) => {
       setError(null);
       console.log('🌐 [TOPIC] Fetching today\'s topic');
       
-      const response = await fetch(`${BACKEND_URL}/api/topic/getNewestTopic`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      });
-      const result = await response.json();
+      const response = await axiosInstance.get('/api/topic/getNewestTopic');
+      const result = response.data;
       
       if (result.success && result.data) {
         setTopic(result.data);

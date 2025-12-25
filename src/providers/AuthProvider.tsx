@@ -99,12 +99,7 @@ const AuthProvider = ({ children }: PropsWithChildren) => {
             // Call backend logout if needed
             if (accessToken) {
                 console.log('🚪 [LOGOUT] Calling backend logout...');
-                await fetch(`${BACKEND_URL}/api/users/logout`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`,
-                    },
-                }).catch((error) => {
+                await axiosInstance.post('/api/users/logout').catch((error) => {
                     console.error('Backend logout error:', error);
                 });
             }

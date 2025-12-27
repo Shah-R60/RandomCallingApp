@@ -1,6 +1,7 @@
 import {Stack, Slot } from 'expo-router';
 import { GestureHandlerRootView} from 'react-native-gesture-handler'
 import React from "react";
+import Toast from 'react-native-toast-message';
 import AuthProvider from '../providers/AuthProvider';
 import { ThemeProvider } from '../providers/ThemeProvider';
 
@@ -15,6 +16,7 @@ export default function RootLayout() {
          </Stack>
        </AuthProvider>
       </ThemeProvider>
+      <Toast />
     </GestureHandlerRootView>
   );
 }

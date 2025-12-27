@@ -6,9 +6,11 @@ import { PropsWithChildren, useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from './AuthProvider';
 import axiosInstance from '../utils/axiosInstance';
+import NetworkError from '../components/NetworkError';
 
 export default function VideoProvider({ children }: PropsWithChildren) {
   const [videoClient, setVideoClient] = useState<StreamVideoClient | null>(null);
+  const [hasError, setHasError] = useState(false);
   const { user, accessToken } = useAuth();
 
   useEffect(() => {
@@ -45,8 +47,9 @@ export default function VideoProvider({ children }: PropsWithChildren) {
 
         setVideoClient(client);
         console.log('✅ Stream Video Client initialized');
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Error initializing Stream Video Client:', error);
+        setHasError(true);
       }
     };
 
@@ -59,6 +62,15 @@ export default function VideoProvider({ children }: PropsWithChildren) {
       }
     };
   }, [user?._id, accessToken]);
+
+  const handleRetry = () => {
+    setHasError(false);
+    setVideoClient(null);
+  };
+
+  if (hasError) {
+    return <NetworkError onRetry={handleRetry} />;
+  }
 
   if (!videoClient) {
     return (

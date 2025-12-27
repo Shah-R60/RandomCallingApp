@@ -7,6 +7,8 @@ import {
 } from '@stream-io/video-react-native-sdk';
 import { router } from 'expo-router';
 import { useEffect, useState, useRef } from 'react';
+import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
+import InCallManager from 'react-native-incall-manager';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert, LogBox } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../providers/AuthProvider';
@@ -27,6 +29,56 @@ function AudioCallUI() {
   const callStartTimeRef = useRef<number | null>(null);
 
   const call = useCalls()[0];
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+
+  // Start InCallManager when call is active (for proximity sensor)
+  useEffect(() => {
+    // Start InCallManager with speaker on by default
+    InCallManager.start({ media: 'audio' });
+    InCallManager.setForceSpeakerphoneOn(true);
+    console.log('📱 [INCALL] InCallManager started with speaker on');
+
+    return () => {
+      // Stop InCallManager when leaving call screen
+      InCallManager.stop();
+      console.log('📱 [INCALL] InCallManager stopped');
+    };
+  }, []);
+
+  // Set initial audio mode for call with Bluetooth support
+  useEffect(() => {
+    const setupAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          playThroughEarpieceAndroid: false,
+          // These settings enable Bluetooth audio routing
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+          shouldDuckAndroid: false,
+        });
+        console.log('🎧 [AUDIO] Audio mode configured with Bluetooth support');
+      } catch (error) {
+        console.error('Error setting audio mode:', error);
+      }
+    };
+    setupAudio();
+
+    // Cleanup audio mode when component unmounts
+    return () => {
+      Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: false,
+        staysActiveInBackground: false,
+        playThroughEarpieceAndroid: false,
+        interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+        interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+        shouldDuckAndroid: true,
+      }).catch(() => {});
+    };
+  }, []);
 
   // Monitor duration
   useEffect(() => {
@@ -155,6 +207,34 @@ function AudioCallUI() {
     }
   };
 
+  const handleToggleSpeaker = async () => {
+    try {
+      const newSpeakerState = !isSpeakerOn;
+      setIsSpeakerOn(newSpeakerState);
+      
+      // Control speakerphone via InCallManager
+      // When speaker is OFF (null/false), InCallManager automatically enables proximity sensor
+      // When speaker is ON (true), proximity sensor is disabled
+      // This handles screen off when phone is near ear automatically
+      InCallManager.setForceSpeakerphoneOn(newSpeakerState ? true : false);
+      
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        playThroughEarpieceAndroid: !newSpeakerState,
+        // Keep Bluetooth support while toggling speaker
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+        shouldDuckAndroid: false,
+      });
+      
+      console.log(`🔊 [SPEAKER] Speaker ${newSpeakerState ? 'ON (Speaker/Bluetooth)' : 'OFF (Earpiece with proximity sensor)'}`);
+    } catch (error) {
+      console.error('❌ [SPEAKER ERROR]:', error);
+    }
+  };
+
   const otherParticipant = participants.find(p => p.userId !== call?.currentUserId);
   const isMuted = call?.microphone.state.status === 'disabled';
 
@@ -206,8 +286,9 @@ function AudioCallUI() {
 
         {/* Call Controls */}
         <View style={styles.controls}>
+          {/* Microphone Button */}
           <Pressable
-            style={[styles.controlButton, isMuted && styles.mutedButton]}
+            style={[styles.controlButton, isMuted && styles.activeControlButton]}
             onPress={handleToggleMute}
           >
             <Ionicons
@@ -217,11 +298,24 @@ function AudioCallUI() {
             />
           </Pressable>
 
+          {/* End Call Button */}
           <Pressable
             style={[styles.controlButton, styles.endCallButton]}
             onPress={handleEndCall}
           >
-            <Ionicons name="call" size={28} color="#fff" />
+            <Ionicons name="call" size={28} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
+          </Pressable>
+
+          {/* Speaker Button */}
+          <Pressable
+            style={[styles.controlButton, !isSpeakerOn && styles.activeControlButton]}
+            onPress={handleToggleSpeaker}
+          >
+            <Ionicons
+              name={isSpeakerOn ? 'volume-high' : 'volume-mute'}
+              size={28}
+              color="#fff"
+            />
           </Pressable>
         </View>
       </View>
@@ -235,6 +329,7 @@ export default function CallScreen() {
   const hasJoinedRef = useRef(false);
   const navigatedRef = useRef(false);
   const callIdRef = useRef<string | null>(null);
+  const retryRef = useRef(false);
 
   // Suppress known harmless WebRTC teardown warnings
   useEffect(() => {
@@ -278,6 +373,24 @@ export default function CallScreen() {
         console.error('❌ [ERROR] Error setting up audio call:', error);
         hasJoinedRef.current = false;
         callIdRef.current = null;
+
+        // Retry once on initial WebSocket failure
+        const isWsFailure = (error as any)?.isWSFailure || (error as any)?.message?.includes('WS connection');
+        if (!retryRef.current && isWsFailure) {
+          retryRef.current = true;
+          console.log('🔁 [RETRY] Reattempting call join after WS failure...');
+          setTimeout(setupCall, 1200);
+          return;
+        }
+
+        Toast.show({
+          type: 'error',
+          text1: 'Connection issue',
+          text2: 'Could not join the call. Please try again.',
+          position: 'bottom',
+          visibilityTime: 4000,
+        });
+        requestAnimationFrame(() => router.replace('/(home)'));
       }
     };
 
@@ -309,7 +422,7 @@ export default function CallScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#667eea',
+    backgroundColor: '#1e1c64ff',
   },
   content: {
     flex: 1,
@@ -339,12 +452,12 @@ const styles = StyleSheet.create({
     width: 160,
     height: 160,
     borderRadius: 80,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#1a1a2e',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
-    borderWidth: 4,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 3,
+    borderColor: '#2d2d44',
   },
   participantName: {
     fontSize: 28,
@@ -371,26 +484,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 30,
+    gap: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   controlButton: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#4a5568',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
-  mutedButton: {
-    backgroundColor: 'rgba(239, 68, 68, 0.8)',
+  activeControlButton: {
+    backgroundColor: '#667eea',
   },
   endCallButton: {
     backgroundColor: '#ef4444',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
   },
   disconnectOverlay: {
     position: 'absolute',

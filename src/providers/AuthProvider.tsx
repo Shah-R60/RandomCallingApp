@@ -2,6 +2,7 @@ import React, { useEffect, PropsWithChildren, createContext, useState, useContex
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import axiosInstance from '../utils/axiosInstance';
+import NetworkError from '../components/NetworkError';
 
 const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
 
@@ -22,6 +23,8 @@ type AuthContext = {
     signOut: () => Promise<void>;
     refreshUserData: () => Promise<void>;
     setAuthData: (user: User, accessToken: string, refreshToken: string) => Promise<void>;
+    hasError: boolean;
+    setHasError: (value: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContext>({
@@ -30,13 +33,16 @@ const AuthContext = createContext<AuthContext>({
     refreshToken: null,
     signOut: async () => {},
     refreshUserData: async () => {},
-    setAuthData: async () => {}
+    setAuthData: async () => {},
+    hasError: false,
+    setHasError: () => {}
 });
 
 const AuthProvider = ({ children }: PropsWithChildren) => {
     const [user, setUser] = useState<User | null>(null);
     const [accessToken, setAccessToken] = useState<string | null>(null);
     const [refreshToken, setRefreshToken] = useState<string | null>(null);
+    const [hasError, setHasError] = useState(false);
 
     useEffect(() => {
         loadStoredAuth();
@@ -73,8 +79,9 @@ const AuthProvider = ({ children }: PropsWithChildren) => {
                 setUser(response.data.data);
                 await AsyncStorage.setItem('@user', JSON.stringify(response.data.data));
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error refreshing user data:', error);
+            setHasError(true);
             // If refresh fails, user might need to login again
         }
     };
@@ -130,8 +137,17 @@ const AuthProvider = ({ children }: PropsWithChildren) => {
         }
     };
 
+    const handleRetry = () => {
+        setHasError(false);
+        loadStoredAuth();
+    };
+
+    if (hasError) {
+        return <NetworkError onRetry={handleRetry} />;
+    }
+
     return (
-        <AuthContext.Provider value={{ user, accessToken, refreshToken, signOut, refreshUserData, setAuthData }}>
+        <AuthContext.Provider value={{ user, accessToken, refreshToken, signOut, refreshUserData, setAuthData, hasError, setHasError }}>
             {children}
         </AuthContext.Provider>
     );

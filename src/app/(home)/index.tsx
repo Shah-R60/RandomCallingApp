@@ -13,6 +13,7 @@ import TopicCardSkeleton from '../../components/TopicCardSkeleton';
 import SwipeButton from 'rn-swipe-button';
 import { useTheme } from '../../providers/ThemeProvider';
 import axiosInstance from '../../utils/axiosInstance';
+import { useBackgroundMusic } from '../../hooks/useBackgroundMusic';
 
 export default function HomeScreen() {
   const [isSearching, setIsSearching] = useState(false);
@@ -23,15 +24,20 @@ export default function HomeScreen() {
   const { user, accessToken } = useAuth();
   const { topic, loading: topicLoading } = useTopic();
   const { theme } = useTheme();
+  const { ensureLatestMusic, playWaitingMusic, stopMusic } = useBackgroundMusic();
 
   // Cleanup polling on unmount
   useEffect(() => {
+    ensureLatestMusic();
+
     return () => {
       if (pollingIntervalRef.current) {
         clearTimeout(pollingIntervalRef.current);
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
       }
+
+      stopMusic();
     };
   }, []);
 
@@ -55,6 +61,7 @@ export default function HomeScreen() {
 
     setIsSearching(true);
     setStatus('Joining queue...');
+    playWaitingMusic();
 
     try {
       // Join matchmaking queue
@@ -68,6 +75,7 @@ export default function HomeScreen() {
       if (result.data.status === 'matched') {
         console.log('🎉 [MATCH FOUND] Immediately matched!');
         setStatus('Match found!');
+        stopMusic();
         await joinCall(result.data.callId, result.data.matchedWith);
       } else if (result.data.status === 'waiting') {
         console.log('⏳ [WAITING] Added to queue, starting to check for matches...');
@@ -89,6 +97,7 @@ export default function HomeScreen() {
       });
       setIsSearching(false);
       setStatus('');
+      stopMusic();
     }
   };
 
@@ -119,6 +128,7 @@ export default function HomeScreen() {
             pollingIntervalRef.current = null;
           }
           setStatus('Match found!');
+          stopMusic();
           await joinCall(result.data.queueEntry.call_id, result.data.queueEntry.matched_with);
         } else if (result.data.status === 'not_in_queue') {
           console.log('⚠️ [NOT IN QUEUE] User removed from queue');
@@ -126,6 +136,7 @@ export default function HomeScreen() {
             clearInterval(pollingIntervalRef.current);
             pollingIntervalRef.current = null;
           }
+          stopMusic();
           setIsSearching(false);
           setStatus('');
         } else if (pollCount >= maxPolls) {
@@ -142,6 +153,7 @@ export default function HomeScreen() {
             console.error('Error leaving queue:', err);
           }
           
+          stopMusic();
           setIsSearching(false);
           setStatus('');
           
@@ -170,6 +182,7 @@ export default function HomeScreen() {
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
         }
+        stopMusic();
         setIsSearching(false);
         setStatus('');
       }
@@ -212,6 +225,7 @@ export default function HomeScreen() {
       });
 
       console.log('✅ [CALL CREATED] Call created successfully');
+      stopMusic();
       router.push('/call');
     } catch (error) {
       console.error('❌ [ERROR] Error joining call:', error);
@@ -225,6 +239,7 @@ export default function HomeScreen() {
           style: { borderRadius: 20 }
         }
       });
+      stopMusic();
       setIsSearching(false);
       setStatus('');
     }
@@ -242,10 +257,12 @@ export default function HomeScreen() {
     
     try {
       await axiosInstance.post('/api/matchmaking/leave');
+      stopMusic();
       setIsSearching(false);
       setStatus('');
     } catch (error) {
       console.error('❌ [ERROR] Error leaving queue:', error);
+      stopMusic();
       setIsSearching(false);
       setStatus('');
     }

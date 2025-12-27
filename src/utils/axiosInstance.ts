@@ -78,7 +78,7 @@ axiosInstance.interceptors.response.use(
 
         // Call refresh token endpoint
         const response = await axios.post(
-          `${BACKEND_URL}/api/users/refresh-token`,
+          `${BACKEND_URL}/api/users/refresh`,
           { refreshToken },
           {
             headers: {

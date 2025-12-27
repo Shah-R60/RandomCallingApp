@@ -14,7 +14,7 @@ const UserScreen = () => {
                 let { data: profiles, error } = await supabase
                     .from('profiles')
                     .select('*')
-                    .neq('id', user?.id) // Exclude the current user
+                    .neq('id', user?._id) // Exclude the current user
                 if (error) {
                     console.error('Error fetching users:', error);  
                     throw error;

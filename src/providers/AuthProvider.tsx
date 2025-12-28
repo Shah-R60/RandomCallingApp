@@ -1,7 +1,7 @@
 import React, { useEffect, PropsWithChildren, createContext, useState, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import axiosInstance from '../utils/axiosInstance';
+import axiosInstance, { setAuthFailureHandler } from '../utils/axiosInstance';
 import NetworkError from '../components/NetworkError';
 
 const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
@@ -45,7 +45,19 @@ const AuthProvider = ({ children }: PropsWithChildren) => {
     const [hasError, setHasError] = useState(false);
 
     useEffect(() => {
+        setAuthFailureHandler(async () => {
+            // AsyncStorage is already cleared in axiosInstance; ensure state is cleared too.
+            setUser(null);
+            setAccessToken(null);
+            setRefreshToken(null);
+            setHasError(false);
+        });
+
         loadStoredAuth();
+
+        return () => {
+            setAuthFailureHandler(null);
+        };
     }, []);
 
     const loadStoredAuth = async () => {
@@ -81,8 +93,11 @@ const AuthProvider = ({ children }: PropsWithChildren) => {
             }
         } catch (error: any) {
             console.error('Error refreshing user data:', error);
+            // If this is an auth error, axiosInstance will handle clearing tokens + state.
+            if (error?.response?.status === 401) {
+                return;
+            }
             setHasError(true);
-            // If refresh fails, user might need to login again
         }
     };
 

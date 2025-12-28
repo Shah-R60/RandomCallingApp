@@ -9,6 +9,13 @@ const axiosInstance = axios.create({
   timeout: 60000,
 });
 
+type AuthFailureHandler = (reason: 'no_refresh_token' | 'refresh_failed', error?: unknown) => void | Promise<void>;
+let authFailureHandler: AuthFailureHandler | null = null;
+
+export const setAuthFailureHandler = (handler: AuthFailureHandler | null) => {
+  authFailureHandler = handler;
+};
+
 // Flag to prevent multiple refresh attempts
 let isRefreshing = false;
 let failedQueue: any[] = [];
@@ -73,6 +80,9 @@ axiosInstance.interceptors.response.use(
         const refreshToken = await AsyncStorage.getItem('@refresh_token');
         
         if (!refreshToken) {
+          if (authFailureHandler) {
+            await authFailureHandler('no_refresh_token');
+          }
           throw new Error('No refresh token available');
         }
 
@@ -118,6 +128,10 @@ axiosInstance.interceptors.response.use(
 
         // Clear tokens and redirect to login
         await AsyncStorage.multiRemove(['@access_token', '@refresh_token', '@user']);
+
+        if (authFailureHandler) {
+          await authFailureHandler('refresh_failed', refreshError);
+        }
         
         // You can emit an event here to redirect to login screen
         // or use a navigation service

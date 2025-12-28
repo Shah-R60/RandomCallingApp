@@ -9,13 +9,17 @@ import { router } from 'expo-router';
 import { useEffect, useState, useRef } from 'react';
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import InCallManager from 'react-native-incall-manager';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert, LogBox } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert, LogBox, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../../providers/AuthProvider';
 import Toast from 'react-native-toast-message';
 import axiosInstance from '../../../utils/axiosInstance';
 
 const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
+const DEFAULT_CALL_DURATION = 1 * 60; // 15 minutes
+const EXTENDED_CALL_DURATION = DEFAULT_CALL_DURATION+2*60; // 30 minutes
+const EXTEND_TIME_COST = 5; // Cost in stars/coins to extend
+const MIN_COINS_REQUIRED = 25; // Minimum coins required to use extend feature
 
 function AudioCallUI() {
   const { useCallCallingState, useParticipants, useCallSession } = useCallStateHooks();
@@ -24,19 +28,80 @@ function AudioCallUI() {
   const session = useCallSession();
   const [duration, setDuration] = useState(0);
   const [showDisconnectMessage, setShowDisconnectMessage] = useState(false);
+  const [showTimeEndedMessage, setShowTimeEndedMessage] = useState(false);
+  const [showExtendModal, setShowExtendModal] = useState(false);
+  const [maxCallDuration, setMaxCallDuration] = useState(DEFAULT_CALL_DURATION);
   const hasSeenOtherParticipantRef = useRef(false);
-  const { accessToken, refreshUserData } = useAuth();
+  const { accessToken, refreshUserData, user } = useAuth();
   const callStartTimeRef = useRef<number | null>(null);
+  const maxCallDurationRef = useRef<number>(DEFAULT_CALL_DURATION);
+  const hasShownPartnerExtendToastRef = useRef(false);
 
   const call = useCalls()[0];
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
+
+  const hasExtendedTime = maxCallDuration >= EXTENDED_CALL_DURATION;
+
+  useEffect(() => {
+    maxCallDurationRef.current = maxCallDuration;
+  }, [maxCallDuration]);
+
+  // Check initial custom data for extended time (on mount/call change)
+  useEffect(() => {
+    if (!call) return;
+
+    const customData = call.state.custom;
+    if (customData?.extendedDuration) {
+      const extendedDuration = Number(customData.extendedDuration);
+      if (Number.isFinite(extendedDuration) && extendedDuration > maxCallDurationRef.current) {
+        console.log('🔄 [SYNC] Detected extended duration from call data:', extendedDuration);
+        setMaxCallDuration(extendedDuration);
+      }
+    }
+  }, [call?.id]); // Only run when call ID changes
+
+  // Listen for time extension from other participant via custom events
+  useEffect(() => {
+    if (!call) return;
+
+    const unsubscribe = call.on('custom', (event: any) => {
+      const payload = event?.custom ?? event?.data?.custom ?? event?.payload?.custom;
+      const eventType = payload?.type;
+
+      if (eventType !== 'extend_call_duration') return;
+
+      const extendedDuration = Number(payload?.extendedDuration);
+      if (!Number.isFinite(extendedDuration)) return;
+
+      if (extendedDuration > maxCallDurationRef.current) {
+        setMaxCallDuration(extendedDuration);
+
+        if (!hasShownPartnerExtendToastRef.current) {
+          hasShownPartnerExtendToastRef.current = true;
+          Toast.show({
+            type: 'success',
+            text1: '⏰ Time Extended!',
+            text2: 'Your partner extended the call to 30 minutes',
+            position: 'top',
+            visibilityTime: 4000,
+          });
+        }
+
+        console.log('✅ [SYNC] Time extended by custom event to:', extendedDuration);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [call]); // Only depend on call
 
   // Start InCallManager when call is active (for proximity sensor)
   useEffect(() => {
-    // Start InCallManager with speaker on by default
+    // Start InCallManager with speaker OFF (earpiece) by default
     InCallManager.start({ media: 'audio' });
-    InCallManager.setForceSpeakerphoneOn(true);
-    console.log('📱 [INCALL] InCallManager started with speaker on');
+    InCallManager.setForceSpeakerphoneOn(false);
+    console.log('📱 [INCALL] InCallManager started with speaker off (earpiece)');
 
     return () => {
       // Stop InCallManager when leaving call screen
@@ -53,7 +118,7 @@ function AudioCallUI() {
           allowsRecordingIOS: true,
           playsInSilentModeIOS: true,
           staysActiveInBackground: true,
-          playThroughEarpieceAndroid: false,
+          playThroughEarpieceAndroid: true,
           // These settings enable Bluetooth audio routing
           interruptionModeIOS: InterruptionModeIOS.DoNotMix,
           interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
@@ -80,7 +145,7 @@ function AudioCallUI() {
     };
   }, []);
 
-  // Monitor duration
+  // Monitor duration and enforce time limit
   useEffect(() => {
     if (callingState === CallingState.JOINED && session) {
       // Record call start time
@@ -92,11 +157,134 @@ function AudioCallUI() {
         const startTime = session.started_at ? new Date(session.started_at).getTime() : Date.now();
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
         setDuration(elapsed);
+        
+        // Check if call has exceeded max duration
+        if (elapsed >= maxCallDuration && !showTimeEndedMessage) {
+          console.log(`⏰ [TIME LIMIT] Call exceeded ${maxCallDuration / 60} minutes, ending call...`);
+          setShowTimeEndedMessage(true);
+          clearInterval(interval);
+          
+          // End call after showing message
+          setTimeout(async () => {
+            try {
+              await call?.endCall();
+            } catch (error) {
+              console.error('Error ending call:', error);
+            }
+            router.push('/(home)');
+          }, 3000);
+        }
+        
+        // Show warning toast at 1 minute before limit
+        if (elapsed === (maxCallDuration - 60)) {
+          Toast.show({
+            type: 'info',
+            text1: '⏰ 1 Minute Remaining',
+            text2: 'Your call will end in 1 minute',
+            position: 'top',
+            visibilityTime: 5000,
+          });
+        }
       }, 1000);
 
       return () => clearInterval(interval);
     }
-  }, [callingState, session]);
+  }, [callingState, session, showTimeEndedMessage, maxCallDuration]);
+
+  // Handle Increase Time button press
+  const handleIncreaseTimePress = () => {
+    // Check if user has already extended time
+    if (hasExtendedTime) {
+      Toast.show({
+        type: 'info',
+        text1: 'Already Extended',
+        text2: 'You can only extend the call once',
+        position: 'top',
+        visibilityTime: 3000,
+      });
+      return;
+    }
+
+    // Check if user has minimum coins required
+    if (!user || user.stars < MIN_COINS_REQUIRED) {
+      Toast.show({
+        type: 'error',
+        text1: 'Insufficient Stars',
+        text2: `You need at least ${MIN_COINS_REQUIRED} stars to extend call time`,
+        position: 'top',
+        visibilityTime: 3000,
+      });
+      return;
+    }
+
+    // Show extend modal
+    setShowExtendModal(true);
+  };
+
+  // Handle extend time confirmation
+  const handleExtendTime = async () => {
+    try {
+      setShowExtendModal(false);
+      
+      // Deduct coins via API
+      const response = await axiosInstance.post('/api/users/stars/decrease', {
+        amount: EXTEND_TIME_COST
+      });
+
+      if (response.data.success) {
+        // Sync with the other participant using custom events (call members usually can't UpdateCall)
+        try {
+          const sendCustomEvent = (call as any)?.sendCustomEvent;
+          if (typeof sendCustomEvent === 'function') {
+            await sendCustomEvent({
+              type: 'extend_call_duration',
+              extendedDuration: EXTENDED_CALL_DURATION,
+              extendedBy: user?._id || 'unknown',
+              extendedAt: new Date().toISOString(),
+            });
+            console.log('🔄 [SYNC] Sent custom event with extended duration');
+          } else {
+            console.warn('⚠️ [SYNC] sendCustomEvent not available on call object');
+          }
+        } catch (syncError) {
+          console.error('⚠️ [SYNC] Failed to sync with partner, but local extension applied:', syncError);
+        }
+
+        // Extend the call duration locally
+        setMaxCallDuration(EXTENDED_CALL_DURATION);
+        
+        // Refresh user data to update coin balance
+        await refreshUserData();
+
+        Toast.show({
+          type: 'success',
+          text1: '⏰ Time Extended!',
+          text2: 'Call extended to 30 minutes',
+          position: 'top',
+          visibilityTime: 3000,
+        });
+        
+        console.log('✅ [EXTEND TIME] Call extended to 30 minutes');
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Failed to Extend',
+          text2: response.data.message || 'Please try again',
+          position: 'top',
+          visibilityTime: 3000,
+        });
+      }
+    } catch (error: any) {
+      console.error('❌ [EXTEND TIME ERROR]:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.response?.data?.message || 'Failed to extend call time',
+        position: 'top',
+        visibilityTime: 3000,
+      });
+    }
+  };
 
   // Monitor if other participant leaves
   useEffect(() => {
@@ -106,10 +294,10 @@ function AudioCallUI() {
 
     const otherParticipant = participants.find(p => p.userId !== call?.currentUserId);
     
-    // Track if we've seen the other participant
-    if (otherParticipant) {
+    // Track if we've seen the other participant (only log once when first detected)
+    if (otherParticipant && !hasSeenOtherParticipantRef.current) {
       hasSeenOtherParticipantRef.current = true;
-      console.log('👥 [PARTICIPANT] Other participant is present:', otherParticipant.userId);
+      console.log('👥 [PARTICIPANT] Other participant joined:', otherParticipant.userId);
     }
     
     // Only show alert if we previously saw them and now they're gone
@@ -240,6 +428,61 @@ function AudioCallUI() {
 
   return (
     <View style={styles.container}>
+      {/* Extend Time Modal */}
+      <Modal
+        visible={showExtendModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowExtendModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="time-outline" size={32} color="#1e1c64" />
+              <Text style={styles.modalTitle}>Extend Call Duration</Text>
+            </View>
+            <Text style={styles.modalMessage}>
+              Extend this call to 30 minutes for both sides.
+            </Text>
+            <Text style={styles.modalCost}>
+              This will use {EXTEND_TIME_COST}⭐. Do you want to continue?
+            </Text>
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonNo]}
+                onPress={() => setShowExtendModal(false)}
+              >
+                <Text style={styles.modalButtonTextNo}>No</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonYes]}
+                onPress={handleExtendTime}
+              >
+                <Text style={styles.modalButtonTextYes}>Yes, Extend</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Top Action Buttons */}
+      <View style={styles.topActions}>
+        <Pressable 
+          style={[styles.topActionButton, hasExtendedTime && styles.disabledButton]} 
+          onPress={handleIncreaseTimePress}
+        >
+          <Ionicons name="time-outline" size={20} color="#fff" />
+          <Text style={styles.topActionText}>
+            {hasExtendedTime ? 'Extended' : 'Increase Time'}
+          </Text>
+        </Pressable>
+        
+        <Pressable style={[styles.topActionButton, styles.reportButton]} onPress={() => console.log('Report pressed')}>
+          <Ionicons name="flag-outline" size={20} color="#fff" />
+          <Text style={styles.topActionText}>Report</Text>
+        </Pressable>
+      </View>
+
       {/* Disconnect Message Overlay */}
       {showDisconnectMessage && (
         <View style={styles.disconnectOverlay}>
@@ -254,6 +497,22 @@ function AudioCallUI() {
           </View>
         </View>
       )}
+
+      {/* Time Ended Message Overlay */}
+      {showTimeEndedMessage && (
+        <View style={styles.disconnectOverlay}>
+          <View style={styles.disconnectCard}>
+            <Ionicons name="time-outline" size={48} color="#f59e0b" />
+            <Text style={styles.disconnectTitle}>Time's Up!</Text>
+            <Text style={styles.disconnectMessage}>Your 15-minute call session has ended</Text>
+            <View style={styles.disconnectProgress}>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.disconnectSubtext}>Returning to home...</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
       <View style={styles.content}>
         {/* Status */}
         <View style={styles.statusContainer}>
@@ -424,10 +683,100 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1e1c64ff',
   },
+  topActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 50,
+    paddingBottom: 10,
+  },
+  topActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 25,
+    gap: 8,
+  },
+  topActionText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  reportButton: {
+    backgroundColor: '#ef4444',
+  },
+  disabledButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    opacity: 0.6,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1e1c64',
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 12,
+    lineHeight: 22,
+  },
+  modalCost: {
+    fontSize: 15,
+    color: '#555',
+    marginBottom: 24,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 16,
+  },
+  modalButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  modalButtonNo: {
+    backgroundColor: 'transparent',
+  },
+  modalButtonYes: {
+    backgroundColor: '#1e1c64',
+  },
+  modalButtonTextNo: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '600',
+  },
+  modalButtonTextYes: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '600',
+  },
   content: {
     flex: 1,
     justifyContent: 'space-between',
-    paddingVertical: 60,
+    paddingVertical: 20,
     paddingHorizontal: 20,
   },
   statusContainer: {

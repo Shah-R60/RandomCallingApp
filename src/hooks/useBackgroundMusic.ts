@@ -47,7 +47,7 @@ export const useBackgroundMusic = () => {
     configureAudio();
 
     return () => {
-      stopMusic();
+      void stopMusic();
     };
   }, []);
 
@@ -74,6 +74,15 @@ export const useBackgroundMusic = () => {
   const downloadToCache = async (url: string, id: string, oldPath?: string | null) => {
     const fileName = `music_${id}.mp3`;
     const destFile = new File(Paths.cache, fileName);
+
+    // If the destination file already exists, remove it so download can overwrite cleanly.
+    try {
+      if (destFile.exists) {
+        destFile.delete();
+      }
+    } catch (error) {
+      console.warn('⚠️ [MUSIC] Failed to remove existing destination before download', error);
+    }
 
     // Clean up old file if provided
     if (oldPath && oldPath !== destFile.uri) {
@@ -166,9 +175,11 @@ export const useBackgroundMusic = () => {
       if (!uriToPlay) return;
 
       // Stop previous sound if any
-      if (soundRef.current) {
-        await soundRef.current.stopAsync().catch(() => {});
-        await soundRef.current.unloadAsync().catch(() => {});
+      const previousSound = soundRef.current;
+      if (previousSound) {
+        soundRef.current = null;
+        await previousSound.stopAsync().catch(() => {});
+        await previousSound.unloadAsync().catch(() => {});
       }
 
       const { sound } = await Audio.Sound.createAsync(
@@ -182,14 +193,15 @@ export const useBackgroundMusic = () => {
   };
 
   const stopMusic = async () => {
-    if (!soundRef.current) return;
+    const sound = soundRef.current;
+    if (!sound) return;
+    // Clear ref immediately to avoid concurrent callers racing.
+    soundRef.current = null;
     try {
-      await soundRef.current.stopAsync();
-      await soundRef.current.unloadAsync();
+      await sound.stopAsync().catch(() => {});
+      await sound.unloadAsync().catch(() => {});
     } catch (error) {
       console.error('❌ [MUSIC] Failed to stop music', error);
-    } finally {
-      soundRef.current = null;
     }
   };
 

@@ -252,17 +252,32 @@ export default function WaitingScreen() {
     scrollContent: {
       flexGrow: 1,
       paddingTop: theme.spacing.lg,
-      paddingHorizontal: theme.spacing.lg,
+      // paddingHorizontal: theme.spacing.sm,
       paddingBottom: theme.spacing.xxl,
-      justifyContent: 'center',
+      justifyContent: 'space-between',
+      gap: theme.spacing.md,
     },
-    card: {
+    topCard: {
       backgroundColor: theme.colors.backgroundDark,
-      borderRadius: theme.borderRadius.xxl,
-      paddingVertical: theme.spacing.xxl,
+      // borderRadius: theme.borderRadius.xxl,
+      paddingVertical: theme.spacing.xl,
       paddingHorizontal: theme.spacing.lg,
       alignItems: 'center',
-      gap: theme.spacing.lg,
+      gap: theme.spacing.md,
+    },
+    middleCard: {
+      backgroundColor: theme.colors.backgroundDark,
+      // borderRadius: theme.borderRadius.xxl,
+      paddingVertical: theme.spacing.lg,
+      paddingHorizontal: theme.spacing.lg,
+      alignItems: 'center',
+    },
+    bottomCard: {
+      backgroundColor: theme.colors.backgroundDark,
+      // borderRadius: theme.borderRadius.xxl,
+      paddingVertical: theme.spacing.lg,
+      paddingHorizontal: theme.spacing.lg,
+      alignItems: 'center',
     },
     statusText: {
       fontSize: theme.fontSize.xl,
@@ -271,30 +286,30 @@ export default function WaitingScreen() {
       textAlign: 'center',
     },
     rulesTitle: {
-      marginTop: theme.spacing.lg,
       color: theme.colors.textPrimary,
       fontSize: theme.fontSize.lg,
       fontWeight: '700',
       textAlign: 'center',
+      marginBottom: theme.spacing.sm,
     },
     rulesText: {
-      marginTop: theme.spacing.sm,
       color: theme.colors.textSecondary,
       fontSize: theme.fontSize.md,
       textAlign: 'center',
       lineHeight: 20,
     },
     cancelButton: {
-      marginTop: theme.spacing.lg,
       paddingVertical: theme.spacing.xs + 8,
       paddingHorizontal: theme.spacing.lg + 12,
       backgroundColor: theme.colors.error,
       borderRadius: theme.borderRadius.xxl,
+      width: '100%',
     },
     cancelButtonText: {
       color: theme.colors.white,
       fontSize: theme.fontSize.md,
       fontWeight: '600',
+      textAlign: 'center',
     },
   });
 
@@ -302,15 +317,22 @@ export default function WaitingScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       <StatusBar style="auto" />
 
-      <View style={styles.card}>
+      {/* Top Card - Animation and Status */}
+      <View style={styles.topCard}>
         <WaitingAnimation />
         <Text style={styles.statusText}>{status}</Text>
+      </View>
 
+      {/* Middle Card - Rules */}
+      <View style={styles.middleCard}>
         <Text style={styles.rulesTitle}>Rules</Text>
         <Text style={styles.rulesText}>
           Be respectful. No harassment. If you feel unsafe, end the call and report.
         </Text>
+      </View>
 
+      {/* Bottom Card - Cancel Button */}
+      <View style={styles.bottomCard}>
         <Pressable style={styles.cancelButton} onPress={handleCancel}>
           <Text style={styles.cancelButtonText}>Cancel</Text>
         </Pressable>

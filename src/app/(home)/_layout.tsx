@@ -129,6 +129,19 @@ export default function HomeLayout() {
               presentation: 'fullScreenModal'
             }} 
           />
+          <Stack.Screen 
+            name="waiting/index" 
+            options={{ 
+              headerShown: true,
+              title: 'Cross-Call',
+              headerStyle: { backgroundColor: theme.colors.primary },
+              headerTintColor: theme.colors.white,
+              headerTitleAlign: 'center',
+              headerTitleStyle: { fontWeight: 'bold' },
+              headerBackVisible: false,
+              headerLeft: () => null
+            }} 
+          />
         </Stack>
         </TopicProvider>
       </CallProvider>

@@ -41,7 +41,7 @@ export default function WaitingScreen() {
   const cleanup = async () => {
     isStoppingRef.current = true;
     clearPolling();
-    stopMusic();
+    await stopMusic();
     await leaveQueue();
   };
 
@@ -79,11 +79,11 @@ export default function WaitingScreen() {
         },
       });
 
-      stopMusic();
+      await stopMusic();
       router.replace('/call');
     } catch (error) {
       console.error('❌ [WAITING] Failed to connect to call:', error);
-      stopMusic();
+      await stopMusic();
 
       Toast.show({
         type: 'error',
@@ -119,14 +119,14 @@ export default function WaitingScreen() {
         if (result?.data?.status === 'matched') {
           clearPolling();
           setStatus('Match found!');
-          stopMusic();
+          await stopMusic();
           await joinCall(result.data.queueEntry.call_id, result.data.queueEntry.matched_with);
           return;
         }
 
         if (result?.data?.status === 'not_in_queue') {
           clearPolling();
-          stopMusic();
+          await stopMusic();
           router.replace('/(home)');
           return;
         }
@@ -134,7 +134,7 @@ export default function WaitingScreen() {
         if (pollCount >= maxPolls) {
           clearPolling();
           await leaveQueue();
-          stopMusic();
+          await stopMusic();
 
           Toast.show({
             type: 'info',
@@ -156,7 +156,7 @@ export default function WaitingScreen() {
       } catch (error) {
         console.error('❌ [WAITING] Polling error:', error);
         clearPolling();
-        stopMusic();
+        await stopMusic();
         router.replace('/(home)');
       }
     };
@@ -167,8 +167,6 @@ export default function WaitingScreen() {
   const startSearch = async () => {
     if (startedRef.current) return;
     startedRef.current = true;
-
-    ensureLatestMusic();
 
     if (!videoClient) {
       Toast.show({
@@ -187,7 +185,6 @@ export default function WaitingScreen() {
 
     try {
       setStatus('Joining queue...');
-      playWaitingMusic();
 
       const response = await axiosInstance.post('/api/matchmaking/join');
       const result = response.data;
@@ -196,9 +193,13 @@ export default function WaitingScreen() {
         throw new Error(result?.message || 'Failed to join queue');
       }
 
+      // Only start music after successful queue join
+      ensureLatestMusic();
+      await playWaitingMusic();
+
       if (result.data.status === 'matched') {
         setStatus('Match found!');
-        stopMusic();
+        await stopMusic();
         await joinCall(result.data.callId, result.data.matchedWith);
         return;
       }
@@ -210,16 +211,20 @@ export default function WaitingScreen() {
       }
 
       throw new Error('Unexpected queue status');
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ [WAITING] Error joining queue:', error);
-      stopMusic();
+      await stopMusic();
+
+      // Check if it's a ban error (403)
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to join queue. Please try again.';
+      const isBanError = error?.response?.status === 403;
 
       Toast.show({
         type: 'error',
-        text1: 'Error',
-        text2: 'Failed to join queue. Please try again.',
+        text1: isBanError ? '🚫 Temporarily Banned' : 'Error',
+        text2: errorMessage,
         position: 'bottom',
-        visibilityTime: 3000,
+        visibilityTime: isBanError ? 6000 : 3000,
         props: {
           style: { borderRadius: 20 },
         },

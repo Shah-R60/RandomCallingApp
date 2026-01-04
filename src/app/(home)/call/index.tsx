@@ -16,7 +16,7 @@ import Toast from 'react-native-toast-message';
 import axiosInstance from '../../../utils/axiosInstance';
 
 const BACKEND_URL = 'https://telegrambackend-1phk.onrender.com';
-const DEFAULT_CALL_DURATION = 1 * 60; // 15 minutes
+const DEFAULT_CALL_DURATION = 5* 60; // 15 minutes
 const EXTENDED_CALL_DURATION = DEFAULT_CALL_DURATION+2*60; // 30 minutes
 const EXTEND_TIME_COST = 5; // Cost in stars/coins to extend
 const MIN_COINS_REQUIRED = 25; // Minimum coins required to use extend feature
@@ -30,6 +30,12 @@ function AudioCallUI() {
   const [showDisconnectMessage, setShowDisconnectMessage] = useState(false);
   const [showTimeEndedMessage, setShowTimeEndedMessage] = useState(false);
   const [showExtendModal, setShowExtendModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [warningData, setWarningData] = useState<any>(null);
+  const [showWarningModal, setShowWarningModal] = useState(false);
   const [maxCallDuration, setMaxCallDuration] = useState(DEFAULT_CALL_DURATION);
   const hasSeenOtherParticipantRef = useRef(false);
   const { accessToken, refreshUserData, user } = useAuth();
@@ -286,6 +292,79 @@ function AudioCallUI() {
     }
   };
 
+  // Handle report submission
+  const handleSubmitReport = async () => {
+    if (!reportReason) {
+      Toast.show({
+        type: 'error',
+        text1: 'Please select a reason',
+        position: 'top',
+        visibilityTime: 2000,
+      });
+      return;
+    }
+
+    const otherParticipant = participants.find(p => p.userId !== call?.currentUserId);
+    if (!otherParticipant) {
+      Toast.show({
+        type: 'error',
+        text1: 'Cannot find other participant',
+        position: 'top',
+        visibilityTime: 2000,
+      });
+      return;
+    }
+
+    setIsSubmittingReport(true);
+
+    try {
+      const response = await axiosInstance.post('/api/reports/submit', {
+        reportedUserId: otherParticipant.userId,
+        reason: reportReason
+      });
+
+      if (response.data.success) {
+        Toast.show({
+          type: 'success',
+          text1: 'Report Submitted',
+          text2: 'Thank you for helping keep our community safe',
+          position: 'top',
+          visibilityTime: 3000,
+        });
+
+        setShowReportModal(false);
+        setReportReason('');
+        setReportDescription('');
+
+        // End call after reporting
+        setTimeout(() => {
+          handleEndCall();
+        }, 1000);
+      }
+    } catch (error: any) {
+      console.error('❌ [REPORT ERROR]:', error);
+      
+      // Check if it's a 429 (daily limit reached)
+      if (error.response?.status === 429) {
+        Alert.alert(
+          '📊 Daily Report Limit Reached',
+          'You have reached the maximum of 3 reports per day. This helps prevent abuse of the reporting system.\n\nYour report limit will reset tomorrow. Thank you for helping keep our community safe!',
+          [{ text: 'I Understand', style: 'default' }]
+        );
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Report Failed',
+          text2: error.response?.data?.message || 'Please try again',
+          position: 'top',
+          visibilityTime: 3000,
+        });
+      }
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   // Monitor if other participant leaves
   useEffect(() => {
     if (callingState !== CallingState.JOINED) {
@@ -373,8 +452,62 @@ function AudioCallUI() {
         }
       }
       
-      requestAnimationFrame(() => router.push('/(home)'));
+      // Check ban/report status and show warning if needed
+      let shouldShowWarning = false;
+      try {
+        const banResponse = await axiosInstance.get('/api/reports/ban-status');
+        const banData = banResponse.data?.data;
+        
+        console.log('📊 [BAN STATUS CHECK]:', banData);
+        
+        if (banData) {
+          // Show warning if banned
+          if (banData.isBanned) {
+            console.log('🚫 [USER BANNED] Showing ban modal');
+            setWarningData({
+              type: 'banned',
+              banExpiresAt: banData.banExpiresAt,
+              banReason: banData.banReason,
+              weeklyBanCount: banData.weeklyBanCount,
+            });
+            setShowWarningModal(true);
+            shouldShowWarning = true;
+          }
+          // Show warning if received reports (1st or 2nd warning)
+          // Only show if report count has INCREASED since last check
+          else if (banData.reportCount > 0 && banData.reportCount < 3) {
+            const previousReportCount = user?.reportCount || 0;
+            
+            if (banData.reportCount > previousReportCount) {
+              console.log(`⚠️ [USER REPORTED] Count increased from ${previousReportCount} to ${banData.reportCount}, showing warning modal`);
+              setWarningData({
+                type: 'warning',
+                reportCount: banData.reportCount,
+                weeklyBanCount: banData.weeklyBanCount,
+                inProbation: banData.inProbation,
+              });
+              setShowWarningModal(true);
+              shouldShowWarning = true;
+            } else {
+              console.log(`ℹ️ [USER REPORTED] Count ${banData.reportCount} unchanged, skipping warning`);
+            }
+          }
+          
+          // Update local user data to reflect new report count
+          if (banData.reportCount !== user?.reportCount || banData.isBanned !== user?.isBanned) {
+             refreshUserData();
+          }
+        }
+      } catch (error) {
+        console.error('❌ [BAN CHECK ERROR]:', error);
+      }
+      
       handleEndCall.isEnding = false;
+      
+      // Only navigate if no warning to show
+      if (!shouldShowWarning) {
+        requestAnimationFrame(() => router.push('/(home)'));
+      }
     }
   };
   // attach flag property
@@ -426,8 +559,103 @@ function AudioCallUI() {
   const otherParticipant = participants.find(p => p.userId !== call?.currentUserId);
   const isMuted = call?.microphone.state.status === 'disabled';
 
+  const handleCloseWarning = () => {
+    setShowWarningModal(false);
+    setWarningData(null);
+    requestAnimationFrame(() => router.push('/(home)'));
+  };
+
+  const formatTimeRemaining = (expiresAt: string) => {
+    const now = new Date();
+    const expiry = new Date(expiresAt);
+    const diff = expiry.getTime() - now.getTime();
+    
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+  };
+
   return (
     <View style={styles.container}>
+      {/* Warning/Ban Modal */}
+      <Modal
+        visible={showWarningModal}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseWarning}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, styles.warningModalCard]}>
+            {warningData?.type === 'banned' ? (
+              // Banned Message
+              <>
+                <View style={styles.modalHeader}>
+                  <Ionicons 
+                    name={warningData.weeklyBanCount >= 3 || (warningData.banExpiresAt && new Date(warningData.banExpiresAt).getTime() - new Date().getTime() > 24 * 60 * 60 * 1000) ? "lock-closed" : "ban"} 
+                    size={28} 
+                    color="#ef4444" 
+                  />
+                  <Text style={styles.modalTitle}>
+                    {warningData.weeklyBanCount >= 3 || (warningData.banExpiresAt && new Date(warningData.banExpiresAt).getTime() - new Date().getTime() > 24 * 60 * 60 * 1000) 
+                      ? "🔒 Extended Restriction" 
+                      : "🚫 Account Temporarily Restricted"}
+                  </Text>
+                </View>
+                <Text style={styles.warningMessage}>
+                  {warningData.weeklyBanCount >= 3 || (warningData.banExpiresAt && new Date(warningData.banExpiresAt).getTime() - new Date().getTime() > 24 * 60 * 60 * 1000)
+                    ? "You've been banned 3 times in 7 days. Call feature locked for 7 days.\n\nAfter this, your record resets. Use this time to review our guidelines."
+                    : "You've been reported 3 times for violating community guidelines.\n\nCall feature locked for 24 hours. (2 more violations within 7 days = longer ban)"}
+                </Text>
+                <View style={styles.warningTimer}>
+                  <Ionicons name="time-outline" size={20} color="#666" />
+                  <Text style={styles.warningTimerText}>
+                    Call feature unlocked in: {formatTimeRemaining(warningData.banExpiresAt)}
+                  </Text>
+                </View>
+                <Text style={styles.warningSubtext}>
+                  You can still browse topics and read content.
+                </Text>
+                <Pressable 
+                  style={[styles.modalButton, styles.modalButtonYes]}
+                  onPress={handleCloseWarning}
+                >
+                  <Text style={styles.modalButtonTextYes}>I Understand</Text>
+                </Pressable>
+              </>
+            ) : (
+              // Warning Message (1st or 2nd report)
+              <>
+                <View style={styles.modalHeader}>
+                  <Ionicons 
+                    name="warning" 
+                    size={28} 
+                    color="#f59e0b" 
+                  />
+                  <Text style={styles.modalTitle}>
+                    {warningData?.reportCount === 2 ? "⚠️ Second Warning" : "⚠️ Warning"}
+                  </Text>
+                </View>
+                <Text style={styles.warningMessage}>
+                  {warningData?.reportCount === 2
+                    ? `This is your 2nd restriction this week. One more and you'll face a 7-day ban.${warningData?.inProbation ? '\n\nYou are currently in probation period.' : ''}`
+                    : "You've been reported for violating community guidelines.\n\nPlease be respectful in your calls. 2 more reports = 24-hour ban."}
+                </Text>
+                <Pressable 
+                  style={[styles.modalButton, styles.modalButtonYes]}
+                  onPress={handleCloseWarning}
+                >
+                  <Text style={styles.modalButtonTextYes}>I Understand</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Extend Time Modal */}
       <Modal
         visible={showExtendModal}
@@ -477,11 +705,83 @@ function AudioCallUI() {
           </Text>
         </Pressable>
         
-        <Pressable style={[styles.topActionButton, styles.reportButton]} onPress={() => console.log('Report pressed')}>
+        <Pressable style={[styles.topActionButton, styles.reportButton]} onPress={() => setShowReportModal(true)}>
           <Ionicons name="flag-outline" size={20} color="#fff" />
           <Text style={styles.topActionText}>Report</Text>
         </Pressable>
       </View>
+
+      {/* Report Modal */}
+      <Modal
+        visible={showReportModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowReportModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, styles.reportModalCard]}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="flag" size={32} color="#ef4444" />
+              <Text style={styles.modalTitle}>Report User</Text>
+            </View>
+            
+            <Text style={styles.reportHelpText}>
+              Please select a reason for reporting this user:
+            </Text>
+
+            {/* Report Reasons */}
+            <View style={styles.reportReasons}>
+              {[
+                { value: 'harassment', label: 'Harassment' },
+                { value: 'abuse', label: 'Abusive Language' },
+                { value: 'spam', label: 'Spam/Advertising' },
+                { value: 'inappropriate', label: 'Inappropriate Content' },
+                { value: 'other', label: 'Other' }
+              ].map((reason) => (
+                <Pressable
+                  key={reason.value}
+                  style={[
+                    styles.reasonButton,
+                    reportReason === reason.value && styles.reasonButtonSelected
+                  ]}
+                  onPress={() => setReportReason(reason.value)}
+                >
+                  <Text style={[
+                    styles.reasonButtonText,
+                    reportReason === reason.value && styles.reasonButtonTextSelected
+                  ]}>
+                    {reason.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonNo]}
+                onPress={() => {
+                  setShowReportModal(false);
+                  setReportReason('');
+                  setReportDescription('');
+                }}
+              >
+                <Text style={styles.modalButtonTextNo}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.modalButtonYes, styles.reportButtonSubmit]}
+                onPress={handleSubmitReport}
+                disabled={isSubmittingReport}
+              >
+                {isSubmittingReport ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalButtonTextYes}>Submit Report</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Disconnect Message Overlay */}
       {showDisconnectMessage && (
@@ -619,22 +919,36 @@ export default function CallScreen() {
         hasJoinedRef.current = true;
         callIdRef.current = call.id;
         
-        await call.join({
-          create: false,
-        });
-        
-        console.log('✅ [CALL JOINED] Successfully joined');
+        // Only call join() if not already joined
+        if (call.state.callingState !== CallingState.JOINED) {
+          await call.join({
+            create: false,
+          });
+          console.log('✅ [CALL JOINED] Successfully joined');
+        } else {
+          console.log('✅ [ALREADY JOINED] Call is already in joined state');
+        }
         
         // Disable camera explicitly
         await call.camera.disable();
         console.log('📹 [CAMERA] Camera disabled');
       } catch (error) {
         console.error('❌ [ERROR] Error setting up audio call:', error);
+        
+        // If error is "already joined", ignore it and continue
+        const errorMsg = (error as any)?.message || '';
+        if (errorMsg.includes('shall be called only once') || errorMsg.includes('Illegal State')) {
+          console.log('⚠️ [WARNING] Call already joined, continuing...');
+          hasJoinedRef.current = true;
+          callIdRef.current = call.id;
+          return;
+        }
+        
         hasJoinedRef.current = false;
         callIdRef.current = null;
 
         // Retry once on initial WebSocket failure
-        const isWsFailure = (error as any)?.isWSFailure || (error as any)?.message?.includes('WS connection');
+        const isWsFailure = (error as any)?.isWSFailure || errorMsg.includes('WS connection');
         if (!retryRef.current && isWsFailure) {
           retryRef.current = true;
           console.log('🔁 [RETRY] Reattempting call join after WS failure...');
@@ -653,8 +967,8 @@ export default function CallScreen() {
       }
     };
 
-    if (call.state.callingState === CallingState.RINGING || 
-        call.state.callingState === CallingState.IDLE) {
+    // Allow joining in any state except LEFT
+    if (call.state.callingState !== CallingState.LEFT) {
       setupCall();
     }
   }, [call?.id]);
@@ -772,6 +1086,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     fontWeight: '600',
+  },
+  reportModalCard: {
+    maxWidth: 380,
+  },
+  reportHelpText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 16,
+  },
+  reportReasons: {
+    gap: 10,
+    marginBottom: 24,
+  },
+  reasonButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    backgroundColor: '#fff',
+  },
+  reasonButtonSelected: {
+    borderColor: '#ef4444',
+    backgroundColor: '#fef2f2',
+  },
+  reasonButtonText: {
+    fontSize: 15,
+    color: '#333',
+    fontWeight: '500',
+  },
+  reasonButtonTextSelected: {
+    color: '#ef4444',
+    fontWeight: '600',
+  },
+  reportButtonSubmit: {
+    backgroundColor: '#ef4444',
   },
   content: {
     flex: 1,
@@ -900,5 +1250,37 @@ const styles = StyleSheet.create({
   disconnectSubtext: {
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.7)',
+  },
+  warningModalCard: {
+    maxWidth: 400,
+    paddingVertical: 32,
+  },
+  warningMessage: {
+    fontSize: 16,
+    color: '#333',
+    lineHeight: 24,
+    marginBottom: 20,
+    textAlign: 'left',
+  },
+  warningTimer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  warningTimerText: {
+    fontSize: 15,
+    color: '#333',
+    fontWeight: '600',
+  },
+  warningSubtext: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 24,
+    fontStyle: 'italic',
   },
 });

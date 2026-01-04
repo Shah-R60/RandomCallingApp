@@ -7,7 +7,8 @@ import VideoProvider from '../../providers/VideoProvider';
 import CallProvider from '../../providers/CallProvider';
 import { useTheme } from '../../providers/ThemeProvider';
 import { TopicProvider } from '../../providers/TopicProvider';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
 
 const CoinAnimation = () => {
   return (

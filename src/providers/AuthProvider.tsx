@@ -14,6 +14,8 @@ type User = {
     stars: number;
     createdAt: string;
     updatedAt: string;
+    reportCount?: number;
+    isBanned?: boolean;
 }
 
 type AuthContext = {

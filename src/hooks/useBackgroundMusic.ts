@@ -6,6 +6,7 @@ import axiosInstance from '../utils/axiosInstance';
 
 const MUSIC_CACHE_KEY = '@bg_music_meta';
 const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+// const CACHE_DURATION_MS = 1* 1000; // 6 hours for testing
 
 interface StoredMusicMeta {
   _id: string;
@@ -30,6 +31,7 @@ export const useBackgroundMusic = () => {
   const [meta, setMeta] = useState<StoredMusicMeta | null>(null);
   const [sourceUri, setSourceUri] = useState<string | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
+  const fetchLock = useRef<Promise<StoredMusicMeta | null> | null>(null);
 
   useEffect(() => {
     const configureAudio = async () => {
@@ -75,13 +77,25 @@ export const useBackgroundMusic = () => {
     const fileName = `music_${id}.mp3`;
     const destFile = new File(Paths.cache, fileName);
 
-    // If the destination file already exists, remove it so download can overwrite cleanly.
-    try {
-      if (destFile.exists) {
-        destFile.delete();
+    // If the destination file already exists with same ID, skip download
+    const fileExists = await ensureFileExists(destFile.uri);
+    if (fileExists) {
+      console.log('✅ [MUSIC] File already exists, skipping download');
+      
+      // Clean up old file only if it's different from current
+      if (oldPath && oldPath !== destFile.uri) {
+        try {
+          const oldFile = new File(oldPath);
+          if (oldFile.exists) {
+            oldFile.delete();
+          }
+          console.log('🗑️ [MUSIC] Deleted old file');
+        } catch (error) {
+          console.warn('⚠️ [MUSIC] Failed to delete old file', error);
+        }
       }
-    } catch (error) {
-      console.warn('⚠️ [MUSIC] Failed to remove existing destination before download', error);
+      
+      return destFile.uri;
     }
 
     // Clean up old file if provided
@@ -91,13 +105,25 @@ export const useBackgroundMusic = () => {
         if (oldFile.exists) {
           oldFile.delete();
         }
+        console.log('🗑️ [MUSIC] Deleted old file');
       } catch (error) {
         console.warn('⚠️ [MUSIC] Failed to delete old file', error);
       }
     }
 
+    // Ensure destination is clear before downloading
+    try {
+      const destExists = await ensureFileExists(destFile.uri);
+      if (destExists) {
+        destFile.delete();
+      }
+    } catch (error) {
+      console.warn('⚠️ [MUSIC] Failed to clear destination before download', error);
+    }
+
     try {
       const downloadedFile = await File.downloadFileAsync(url, destFile);
+      console.log('✅ [MUSIC] Download complete');
       return downloadedFile.uri;
     } catch (error) {
       console.error('❌ [MUSIC] Download failed', error);
@@ -106,6 +132,11 @@ export const useBackgroundMusic = () => {
   };
 
   const ensureLatestMusic = async () => {
+    if (fetchLock.current) {
+      return fetchLock.current;
+    }
+
+    const run = (async (): Promise<StoredMusicMeta | null> => {
     const now = Date.now();
     const stored = await loadMeta();
 
@@ -166,6 +197,12 @@ export const useBackgroundMusic = () => {
       setIsReady(false);
       return null;
     }
+    })();
+
+    fetchLock.current = run;
+    const result = await run;
+    fetchLock.current = null;
+    return result;
   };
 
   const playWaitingMusic = async () => {
